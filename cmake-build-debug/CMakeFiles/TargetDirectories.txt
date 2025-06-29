@@ -1,0 +1,4 @@
+C:/Users/julie/CLionProjects/CG_hospital/cmake-build-debug/CMakeFiles/CG_hospital.dir
+C:/Users/julie/CLionProjects/CG_hospital/cmake-build-debug/CMakeFiles/Shaders.dir
+C:/Users/julie/CLionProjects/CG_hospital/cmake-build-debug/CMakeFiles/edit_cache.dir
+C:/Users/julie/CLionProjects/CG_hospital/cmake-build-debug/CMakeFiles/rebuild_cache.dir
