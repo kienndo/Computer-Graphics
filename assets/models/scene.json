@@ -1,0 +1,44 @@
+{
+	"pipelines": ["default"],
+
+	"assetfiles": [
+		{
+			"id": "idle_asset",
+			"file": "assets/models/idle.gltf",
+			"format": "GLTF"
+		}
+	],
+
+	"models": [
+		{
+			"id": "ac01",
+			"VD": "VDsimp",
+			"model": "assets/models/M_Aircondition_01.mgcg",
+			"format": "MGCG"
+		}
+	],
+
+	"textures": [
+		{
+			"id": "ac_tex",
+			"format": "COLOR",
+			"texture": "assets/textures/T_Aircondition_01.png"
+		}
+	],
+
+	"instances": [
+		{
+			"technique": "default",
+			"elements": [
+				{
+					"id": "idle_inst",
+					"model": "idle_model",
+					"texture": ["ac_tex"],
+					"translate": [0, 0, 0],
+					"eulerAngles": [0, 0, 0],
+					"scale": [1, 1, 1]
+				}
+			]
+		}
+	]
+}
