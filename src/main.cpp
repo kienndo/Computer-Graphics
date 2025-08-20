@@ -1,6 +1,8 @@
 #include <sstream>
 #include <json.hpp>
 #include "modules/Starter.hpp"
+#include <json.hpp>
+#include "modules/Scene.hpp"
 
 // GLM config must be before GLM headers
 #define GLM_FORCE_RADIANS
@@ -40,9 +42,14 @@ protected:
     VertexDescriptor VMesh;
     Pipeline         PMesh;
 
-    DescriptorSet    DSGubo, DSObj;
-    Model            MObj;
-    Texture          TObj;
+    DescriptorSet    DSGubo; //, DSObj;
+    //Model            MObj;
+    //Texture          TObj;
+
+    // Several Models
+    Scene SC;
+    std::vector<VertexDescriptorRef> VDRs;
+    std::vector<TechniqueRef>PRs;
 
     // --- Camera (simple fixed cam) ---
     glm::vec3 camPos{0.0f, 1.4f, 4.0f};
@@ -76,9 +83,10 @@ protected:
     void localInit() {
         // DSLs
         DSLMesh.init(this, {
-            { 0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,    VK_SHADER_STAGE_ALL_GRAPHICS, sizeof(UBOLocal), 1 },
-            { 1, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT, 0, 1 }
-        });
+    { 0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,       VK_SHADER_STAGE_ALL_GRAPHICS, sizeof(UBOLocal), 1 },
+    { 1, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT, 0,               1 }
+});
+
         DSLGubo.init(this, {
             { 0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,    VK_SHADER_STAGE_ALL_GRAPHICS, sizeof(UBOGlobal), 1 }
         });
@@ -93,27 +101,49 @@ protected:
             }
         );
 
+        VDRs.resize(1); //hva
+        VDRs[0].init("VMesh", &VMesh);
+
         RP.init(this);
 
         PMesh.init(this, &VMesh, "shaders/Mesh.vert.spv", "shaders/Mesh.frag.spv", { &DSLGubo, &DSLMesh });
-        PMesh.setCullMode(VK_CULL_MODE_NONE); // easier while testing placement
+        PMesh.setCullMode(VK_CULL_MODE_NONE);
 
-        // Assets
+        /* Assets
         MObj.init(this, &VMesh, "assets/models/M_Aircondition_01.mgcg", MGCG);
-        TObj.init(this, "assets/textures/T_Aircondition_01.png");
+        TObj.init(this, "assets/textures/T_Aircondition_01.png");*/
+
+        PRs.resize(1);
+        PRs[0].init("Mesh", {
+                             {&PMesh, {
+                                 /*DSLglobal*/{},
+                                 /*DSLlocalChar*/{
+                                        /*t0*/{true,  0, {}}
+                                     }
+                                    }}
+                              }, 1, &VMesh);
 
         // Pool sizing
-        DPSZs.uniformBlocksInPool = 8;
-        DPSZs.texturesInPool      = 4;
-        DPSZs.setsInPool          = 8;
+        DPSZs.uniformBlocksInPool = 256;
+        DPSZs.texturesInPool      = 256;
+        DPSZs.setsInPool          = 256;
+
+        std::cout << "\nLoading the scene\n\n";
+        if(SC.init(this, 1, VDRs, PRs, "assets/models/scene.json") != 0) {
+            std::cout << "ERROR LOADING THE SCENE\n";
+            exit(0);
+        }
     }
 
     void pipelinesAndDescriptorSetsInit() {
         RP.create();
         PMesh.create(&RP);
 
-        DSObj.init(this, &DSLMesh, { TObj.getViewAndSampler() });
+        //DSObj.init(this, &DSLMesh, { TObj.getViewAndSampler() });
         DSGubo.init(this, &DSLGubo, {});
+
+        SC.pipelinesAndDescriptorSetsInit();
+
 
         // Register CB filler
         submitCommandBuffer("main", 0, populateCommandBufferAccess, this);
@@ -123,29 +153,43 @@ protected:
         PMesh.cleanup();
         RP.cleanup();
         DSGubo.cleanup();
-        DSObj.cleanup();
+        //DSObj.cleanup();
+
+        SC.pipelinesAndDescriptorSetsCleanup();
     }
 
     void localCleanup() {
-        TObj.cleanup();
-        MObj.cleanup();
+        //TObj.cleanup();
+        //MObj.cleanup();
         DSLGubo.cleanup();
         DSLMesh.cleanup();
         PMesh.destroy();
         RP.destroy();
+
+        SC.localCleanup();
     }
 
     void populateCommandBuffer(VkCommandBuffer cmdBuffer, int currentImage){
         RP.begin(cmdBuffer, currentImage);
 
+        // Bind pipeline once; Scene will bind its per-object descriptor sets
         PMesh.bind(cmdBuffer);
-        DSGubo.bind(cmdBuffer, PMesh, 0, currentImage);
-        MObj.bind(cmdBuffer);
-        DSObj.bind(cmdBuffer, PMesh, 1, currentImage);
 
-        vkCmdDrawIndexed(cmdBuffer, static_cast<uint32_t>(MObj.indices.size()), 1, 0, 0, 0);
+        // Bind the global UBO (set=0 for your pipeline)
+        DSGubo.bind(cmdBuffer, PMesh, 0, currentImage);
+
+        // Ask the Scene to record draws for all its objects using the technique(s)
+        // One of these should exist in your E09 Scene; use whichever your API exposes:
+
+        // Option A (common in E09):
+        SC.populateCommandBuffer(cmdBuffer, 0, currentImage);
+
+        // Option B (some templates call it draw):
+        // SC.draw(cmdBuffer, currentImage);
+
         RP.end(cmdBuffer);
     }
+
 
     void updateUniformBuffer(uint32_t currentImage) {
         if (glfwGetKey(window, GLFW_KEY_ESCAPE)) {
@@ -207,7 +251,7 @@ protected:
         l.mMat   = World;
         l.nMat   = glm::inverse(glm::transpose(World));
         l.mvpMat = Prj * View * World;
-        DSObj.map(currentImage, &l, 0);
+        //DSObj.map(currentImage, &l, 0);
     }
 
     static void populateCommandBufferAccess(VkCommandBuffer commandBuffer, int currentImage, void *params) {
