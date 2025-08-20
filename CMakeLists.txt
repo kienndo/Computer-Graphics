@@ -53,6 +53,8 @@ elseif(WIN32)
     set(GLFW "C:/VulkanSDK/libs/glfw-3.4.bin.WIN64")
     set(GLM "C:/VulkanSDK/libs/glm")
 
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wa,-mbig-obj")
+
     list(APPEND INCLUDE_DIRS "${GLFW}/include" ${GLM} headers)
     list(APPEND LINK_LIBS "${GLFW}/lib-mingw-w64/libglfw3.a")
 
