@@ -1,73 +1,21 @@
 {
 	"models": [
-		{ "id": "M_Closestool_01", "VD": "VMesh", "model": "assets/models/M_Closestool_01.mgcg", "format": "MGCG" },
-		{ "id": "M_Curtain_01", "VD": "VMesh", "model": "assets/models/M_Curtain_01.mgcg", "format": "MGCG" },
-		{ "id": "M_Door_01", "VD": "VMesh", "model": "assets/models/M_Door_01.mgcg", "format": "MGCG" },
-		{ "id": "M_Door_02", "VD": "VMesh", "model": "assets/models/M_Door_02.mgcg", "format": "MGCG" },
-		{ "id": "M_Door_03", "VD": "VMesh", "model": "assets/models/M_Door_03.mgcg", "format": "MGCG" },
-		{ "id": "M_Floor_01", "VD": "VMesh", "model": "assets/models/M_Floor_01.mgcg", "format": "MGCG" },
-		{ "id": "M_NursesStation_01", "VD": "VMesh", "model": "assets/models/M_NursesStation_01.mgcg", "format": "MGCG" },
-		{ "id": "M_PC_01", "VD": "VMesh", "model": "assets/models/M_PC_01.mgcg", "format": "MGCG" },
-		{ "id": "M_PC_02", "VD": "VMesh", "model": "assets/models/M_PC_02.mgcg", "format": "MGCG" },
-		{ "id": "M_Poster_01", "VD": "VMesh", "model": "assets/models/M_Poster_01.mgcg", "format": "MGCG" },
-		{ "id": "M_PottedPlant_01", "VD": "VMesh", "model": "assets/models/M_PottedPlant_01.mgcg", "format": "MGCG" },
-		{ "id": "M_PottedPlant_02", "VD": "VMesh", "model": "assets/models/M_PottedPlant_02.mgcg", "format": "MGCG" },
-		{ "id": "M_Shelf_01", "VD": "VMesh", "model": "assets/models/M_Shelf_01.mgcg", "format": "MGCG" },
-		{ "id": "M_Shower_01", "VD": "VMesh", "model": "assets/models/M_Shower_01.mgcg", "format": "MGCG" },
-		{ "id": "M_Sky_01", "VD": "VMesh", "model": "assets/models/M_Sky_01.mgcg", "format": "MGCG" },
-		{ "id": "M_Socket_01", "VD": "VMesh", "model": "assets/models/M_Socket_01.mgcg", "format": "MGCG" },
-		{ "id": "M_Sofa_01", "VD": "VMesh", "model": "assets/models/M_Sofa_01.mgcg", "format": "MGCG" },
-		{ "id": "M_Thing_01", "VD": "VMesh", "model": "assets/models/M_Thing_01.mgcg", "format": "MGCG" },
-		{ "id": "M_Thing_02", "VD": "VMesh", "model": "assets/models/M_Thing_02.mgcg", "format": "MGCG" },
-		{ "id": "M_Thing_03", "VD": "VMesh", "model": "assets/models/M_Thing_03.mgcg", "format": "MGCG" },
-		{ "id": "M_Thing_04", "VD": "VMesh", "model": "assets/models/M_Thing_04.mgcg", "format": "MGCG" },
-		{ "id": "M_Thing_05", "VD": "VMesh", "model": "assets/models/M_Thing_05.mgcg", "format": "MGCG" }
+		{ "id": "M_AC", "VD": "VDsimp", "model": "assets/models/M_Aircondition_01.mgcg", "format": "MGCG" }
 	],
 	"textures": [
-		{ "id": "M_Closestool_01", "texture": "assets/textures/T_Closestool_01.png", "format": "C" },
-		{ "id": "M_Curtain_01", "texture": "assets/textures/T_Curtain_01.png", "format": "C" },
-		{ "id": "M_Door_01", "texture": "assets/textures/T_Door_01.png", "format": "C" },
-		{ "id": "M_Door_02", "texture": "assets/textures/T_Door_02.png", "format": "C" },
-		{ "id": "M_Door_03", "texture": "assets/textures/T_Door_03.png", "format": "C" },
-		{ "id": "M_Floor_01", "texture": "assets/textures/T_Floor_01.png", "format": "C" },
-		{ "id": "M_NursesStation_01", "texture": "assets/textures/T_NursesStation_01.png", "format": "C" },
-		{ "id": "M_PC_01", "texture": "assets/textures/T_PC_01.png", "format": "C" },
-		{ "id": "M_Poster_01", "texture": "assets/textures/T_Poster_01.png", "format": "C" },
-		{ "id": "M_PottedPlant_01", "texture": "assets/textures/T_PottedPlant_01.png", "format": "C" },
-		{ "id": "M_PottedPlant_02", "texture": "assets/textures/T_PottedPlant_02.png", "format": "C" },
-		{ "id": "M_Shelf_01", "texture": "assets/textures/T_Shelf_01.png", "format": "C" },
-		{ "id": "M_Socket_01", "texture": "assets/textures/T_Socket_01.png", "format": "C" },
-		{ "id": "M_Sofa_01", "texture": "assets/textures/T_Sofa_01.png", "format": "C" }
+		{ "id": "T_AC", "texture": "assets/textures/T_Aircondition_01.PNG", "format": "C" },
+		{ "id": "Noise", "texture": "assets/textures/Perlin_noise.png", "format": "C" }
 	],
 	"instances": [
 		{
 			"technique": "Mesh",
 			"elements": [
-				{
-					"id": "inst_M_Closestool_01",
-					"model": "M_Closestool_01",
-					"texture": ["T_Closestool_01"],
-					"transform": [20, 0, 0, 0,
-						0,20, 0, -0.1,
-						0, 0,20, 0,
-						0, 0, 0, 1]},
-
-				{ "id": "inst_M_Curtain_01", "model": "M_Curtain_01", "texture": ["T_Curtain_01"] },
-				{ "id": "inst_M_Door_01", "model": "M_Door_01", "texture": ["T_Door_01"] },
-				{ "id": "inst_M_Door_02", "model": "M_Door_02", "texture": ["T_Door_02"] },
-				{ "id": "inst_M_Door_03", "model": "M_Door_03", "texture": ["T_Door_03"] },
-				{ "id": "inst_M_Floor_01", "model": "M_Floor_01", "texture": ["T_Floor_01"] },
-				{ "id": "inst_M_NursesStation_01", "model": "M_NursesStation_01", "texture": ["T_NursesStation_01"] },
-				{ "id": "inst_M_PC_01", "model": "M_PC_01", "texture": ["T_PC_01"] },
-				{ "id": "inst_M_PC_02", "model": "M_PC_02", "texture": ["T_PC_01"] },
-				{ "id": "inst_M_Poster_01", "model": "M_Poster_01", "texture": ["T_Poster_01"] },
-				{ "id": "inst_M_PottedPlant_01", "model": "M_PottedPlant_01", "texture": ["T_PottedPlant_01"] },
-				{ "id": "inst_M_PottedPlant_02", "model": "M_PottedPlant_02", "texture": ["T_PottedPlant_02"] },
-				{ "id": "inst_M_Shelf_01", "model": "M_Shelf_01", "texture": ["T_Shelf_01"] },
-				{ "id": "inst_M_Shower_01", "model": "M_Shower_01", "texture": ["T_Shower_01"] },
-				{ "id": "inst_M_Sky_01", "model": "M_Sky_01", "texture": ["T_Sky_01"] },
-				{ "id": "inst_M_Socket_01", "model": "M_Socket_01", "texture": ["T_Socket_01"] },
-				{ "id": "inst_M_Sofa_01", "model": "M_Sofa_01", "texture": ["T_Sofa_01"] }
+				{ "id": "ac",
+					"model": "M_AC",
+					"texture": ["T_AC", "Noise"],
+					"translate": [0, 1.2, -3],
+					"scale": [1,1,1]
+				}
 			]
 		}
 	]

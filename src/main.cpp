@@ -1,32 +1,31 @@
 #include <sstream>
 #include <json.hpp>
 #include "modules/Starter.hpp"
-#include <json.hpp>
 #include "modules/Scene.hpp"
-
-// GLM config must be before GLM headers
-#define GLM_FORCE_RADIANS
-#define GLM_FORCE_DEPTH_ZERO_TO_ONE
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 
-struct VD {
-    glm::vec3 pos;
-    glm::vec3 norm;
-    glm::vec2 uv;
-};
+#define GLM_FORCE_RADIANS
+#define GLM_FORCE_DEPTH_ZERO_TO_ONE
 
-struct UBOGlobal {
+static void dbgPrintMat4(const glm::mat4 &M, const char *name) {
+    std::cout << name << ":\n";
+    for (int r = 0; r < 4; ++r) {
+        std::cout << "  ";
+        for (int c = 0; c < 4; ++c) std::cout << M[c][r] << " ";
+        std::cout << "\n";
+    }
+}
+
+struct VertexSimp { glm::vec3 pos; glm::vec3 norm; glm::vec2 UV; };
+
+struct GlobalUBO {
     alignas(16) glm::vec3 lightDir;
     alignas(16) glm::vec4 lightColor;
-    alignas(16) glm::vec3 ambLightColor;
     alignas(16) glm::vec3 eyePos;
 };
 
-struct UBOLocal {
-    alignas(4)  float     amb;
-    alignas(4)  float     gamma;
-    alignas(16) glm::vec3 sColor;
+struct LocalUBO {
     alignas(16) glm::mat4 mvpMat;
     alignas(16) glm::mat4 mMat;
     alignas(16) glm::mat4 nMat;
@@ -37,14 +36,12 @@ protected:
     float Ar = 4.0f/3.0f;
 
     RenderPass RP;
-    DescriptorSetLayout DSLGubo, DSLMesh;
+    DescriptorSetLayout DSLglobal, DSLmesh;
 
-    VertexDescriptor VMesh;
+    VertexDescriptor VDsimp;
     Pipeline         PMesh;
 
-    DescriptorSet    DSGubo; //, DSObj;
-    //Model            MObj;
-    //Texture          TObj;
+    DescriptorSet    DSGubo;
 
     // Several Models
     Scene SC;
@@ -52,7 +49,7 @@ protected:
     std::vector<TechniqueRef>PRs;
 
     // --- Camera (simple fixed cam) ---
-    glm::vec3 camPos{0.0f, 1.4f, 4.0f};
+    glm::vec3 camPos{0.0f, 1.6f, 6.0f};
 
     // --- Object transform state (controlled by keyboard) ---
     glm::vec3 objPos   {0.0f, 0.0f, 0.0f};
@@ -62,7 +59,7 @@ protected:
     float     objScale = 0.01f;
 
     // Speeds
-    float MOVE_SPEED = 2.0f;                 // meters/sec
+    float MOVE_SPEED = 10.0f;                 // meters/sec
     float ROT_SPEED  = glm::radians(90.0f);  // rad/sec
 
     void setWindowParameters() {
@@ -81,57 +78,74 @@ protected:
     }
 
     void localInit() {
-        // DSLs
-        DSLMesh.init(this, {
-    { 0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,       VK_SHADER_STAGE_ALL_GRAPHICS, sizeof(UBOLocal), 1 },
-    { 1, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT, 0,               1 }
-});
 
-        DSLGubo.init(this, {
-            { 0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,    VK_SHADER_STAGE_ALL_GRAPHICS, sizeof(UBOGlobal), 1 }
+        // DSLs
+        // set = 0 (global)
+        DSLglobal.init(this, {
+          { 0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, VK_SHADER_STAGE_ALL_GRAPHICS,
+            sizeof(GlobalUBO), 1 }
+        });
+
+        // set = 1 (local)
+        DSLmesh.init(this, {
+          { 0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,         VK_SHADER_STAGE_VERTEX_BIT,
+            sizeof(LocalUBO), 1 },
+          { 1, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT,
+            0, 1 },
+          { 2, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT,
+            1, 1 }
         });
 
         // Vertex layout
-        VMesh.init(this,
-            { { 0, sizeof(VD), VK_VERTEX_INPUT_RATE_VERTEX } },
-            {
-                { 0, 0, VK_FORMAT_R32G32B32_SFLOAT, offsetof(VD, pos),  sizeof(glm::vec3), POSITION },
-                { 0, 1, VK_FORMAT_R32G32B32_SFLOAT, offsetof(VD, norm), sizeof(glm::vec3), NORMAL   },
-                { 0, 2, VK_FORMAT_R32G32_SFLOAT,    offsetof(VD, uv),   sizeof(glm::vec2), UV       }
-            }
+        VDsimp.init(this,
+        { {0, sizeof(VertexSimp), VK_VERTEX_INPUT_RATE_VERTEX} },
+        {
+            {0, 0, VK_FORMAT_R32G32B32_SFLOAT, offsetof(VertexSimp,pos),  sizeof(glm::vec3), POSITION},
+            {0, 1, VK_FORMAT_R32G32B32_SFLOAT, offsetof(VertexSimp,norm), sizeof(glm::vec3), NORMAL},
+            {0, 2, VK_FORMAT_R32G32_SFLOAT,    offsetof(VertexSimp,UV),   sizeof(glm::vec2), UV}
+        }
         );
 
-        VDRs.resize(1); //hva
-        VDRs[0].init("VMesh", &VMesh);
+        VDRs.resize(1);
+        VDRs[0].init("VDsimp", &VDsimp); // OR use the name “VMesh” if your JSON expects that label
+
 
         RP.init(this);
+        RP.properties[0].clearValue = {0.05f, 0.05f, 0.08f, 1.0f};
 
-        PMesh.init(this, &VMesh, "shaders/Mesh.vert.spv", "shaders/Mesh.frag.spv", { &DSLGubo, &DSLMesh });
+        PMesh.init(this, &VDsimp,
+        "shaders/Mesh.vert.spv",
+  "shaders/Mesh.frag.spv",
+  { &DSLglobal, &DSLmesh }
+        );
         PMesh.setCullMode(VK_CULL_MODE_NONE);
-
-        /* Assets
-        MObj.init(this, &VMesh, "assets/models/M_Aircondition_01.mgcg", MGCG);
-        TObj.init(this, "assets/textures/T_Aircondition_01.png");*/
+        PMesh.setPolygonMode(VK_POLYGON_MODE_FILL);
 
         PRs.resize(1);
         PRs[0].init("Mesh", {
-                             {&PMesh, {
-                                 /*DSLglobal*/{},
-                                 /*DSLlocalChar*/{
-                                        /*t0*/{true,  0, {}}
-                                     }
-                                    }}
-                              }, 1, &VMesh);
+          { &PMesh, { /* set0 (global) */{},
+                      /* set1 (local)  */{
+                        /* binding 0: UBO  */ { true, 0, {} },
+                        /* binding 1: tex  */ { true, 1, { } }
+                      } } }
+        }, /*TotalNtextures*/2, &VDsimp);
 
         // Pool sizing
-        DPSZs.uniformBlocksInPool = 256;
-        DPSZs.texturesInPool      = 256;
-        DPSZs.setsInPool          = 256;
+        DPSZs.uniformBlocksInPool = 3;
+        DPSZs.texturesInPool      = 4;
+        DPSZs.setsInPool          = 3;
 
         std::cout << "\nLoading the scene\n\n";
-        if(SC.init(this, 1, VDRs, PRs, "assets/models/scene.json") != 0) {
-            std::cout << "ERROR LOADING THE SCENE\n";
-            exit(0);
+        SC.init(this, 1, VDRs, PRs, "assets/models/scene.json");
+
+        // After SC.init(...)
+        if (SC.TechniqueInstanceCount > 0 && SC.TI[0].InstanceCount > 0) {
+            for (int i = 0; i < SC.TI[0].InstanceCount; ++i) {
+                auto &inst = SC.TI[0].I[i];
+                // Scale it down and push it in front of the camera
+                inst.Wm = glm::translate(glm::mat4(1.0f), glm::vec3(0.0f, 1.2f, -5.0f))
+                        * glm::scale(glm::mat4(1.0f),    glm::vec3(0.1f)); // adjust 0.1f as needed
+            }
         }
     }
 
@@ -139,11 +153,9 @@ protected:
         RP.create();
         PMesh.create(&RP);
 
-        //DSObj.init(this, &DSLMesh, { TObj.getViewAndSampler() });
-        DSGubo.init(this, &DSLGubo, {});
+        DSGubo.init(this, &DSLglobal, {});
 
         SC.pipelinesAndDescriptorSetsInit();
-
 
         // Register CB filler
         submitCommandBuffer("main", 0, populateCommandBufferAccess, this);
@@ -153,16 +165,13 @@ protected:
         PMesh.cleanup();
         RP.cleanup();
         DSGubo.cleanup();
-        //DSObj.cleanup();
 
         SC.pipelinesAndDescriptorSetsCleanup();
     }
 
     void localCleanup() {
-        //TObj.cleanup();
-        //MObj.cleanup();
-        DSLGubo.cleanup();
-        DSLMesh.cleanup();
+        DSLglobal.cleanup();
+        DSLmesh.cleanup();
         PMesh.destroy();
         RP.destroy();
 
@@ -172,87 +181,78 @@ protected:
     void populateCommandBuffer(VkCommandBuffer cmdBuffer, int currentImage){
         RP.begin(cmdBuffer, currentImage);
 
-        // Bind pipeline once; Scene will bind its per-object descriptor sets
+
         PMesh.bind(cmdBuffer);
 
-        // Bind the global UBO (set=0 for your pipeline)
+        // You own set=0 (global). Scene will NOT bind it for you.
         DSGubo.bind(cmdBuffer, PMesh, 0, currentImage);
 
-        // Ask the Scene to record draws for all its objects using the technique(s)
-        // One of these should exist in your E09 Scene; use whichever your API exposes:
-
-        // Option A (common in E09):
+        // Scene binds only its local set(s) and issues vkCmdDrawIndexed
         SC.populateCommandBuffer(cmdBuffer, 0, currentImage);
-
-        // Option B (some templates call it draw):
-        // SC.draw(cmdBuffer, currentImage);
 
         RP.end(cmdBuffer);
     }
 
-
     void updateUniformBuffer(uint32_t currentImage) {
-        if (glfwGetKey(window, GLFW_KEY_ESCAPE)) {
-            glfwSetWindowShouldClose(window, GL_TRUE);
-        }
+        if (glfwGetKey(window, GLFW_KEY_ESCAPE)) glfwSetWindowShouldClose(window, GL_TRUE);
 
-        // --- Input axes from Starter.hpp (WASD/RF for move, arrows/QE for rotate)
-        float deltaT = 0.0f;
-        glm::vec3 m(0.0f), r(0.0f);
-        bool fire = false;
-        getSixAxis(deltaT, m, r, fire);
+        // --- Inputs (WASD/RF move, arrows/QE rotate) ---
+        float dt = 0.0f; glm::vec3 m(0.0f), r(0.0f); bool fire = false;
+        getSixAxis(dt, m, r, fire);
 
-        objYaw   -= r.x * ROT_SPEED * deltaT;
-        objPitch -= r.y * ROT_SPEED * deltaT;
-        objRoll  -= r.z * ROT_SPEED * deltaT;
+        static float yaw   = 0.0f;                 // radians
+        static float pitch = 0.0f;
+        static glm::vec3 camPos = glm::vec3(0.0f, 1.6f, 6.0f);
 
-        objPitch = glm::clamp(objPitch, glm::radians(-89.0f), glm::radians(89.0f));
+        const float ROT_SPEED  = glm::radians(90.0f);  // rad/sec
+        const float MOVE_SPEED = 5.0f;                 // m/s (tweak)
 
-        // --- Build rotation (Ry * Rx * Rz) for local axes ---
-        glm::mat4 Rx = glm::rotate(glm::mat4(1.0f), objPitch, glm::vec3(1,0,0));
-        glm::mat4 Ry = glm::rotate(glm::mat4(1.0f), objYaw,   glm::vec3(0,1,0));
-        glm::mat4 Rz = glm::rotate(glm::mat4(1.0f), objRoll,  glm::vec3(0,0,1));
-        glm::mat4 R  = Ry * Rx * Rz;
+        yaw   -= r.x * ROT_SPEED * dt;
+        pitch -= r.y * ROT_SPEED * dt;
+        pitch  = glm::clamp(pitch, glm::radians(-89.0f), glm::radians(89.0f));
 
-        // Local basis vectors (forward/right/up) from rotation
-        glm::vec3 fwd = glm::vec3(R * glm::vec4(0,0,-1,0));
-        glm::vec3 rgt = glm::vec3(R * glm::vec4(1,0, 0,0));
-        glm::vec3 up  = glm::vec3(R * glm::vec4(0,1, 0,0));
+        // R = Ry * Rx
+        glm::mat4 Ry = glm::rotate(glm::mat4(1), yaw,   glm::vec3(0,1,0));
+        glm::mat4 Rx = glm::rotate(glm::mat4(1), pitch, glm::vec3(1,0,0));
+        glm::mat4 R  = Ry * Rx;
 
-        // Update position (move in object-local space)
-        objPos += rgt * (m.x * MOVE_SPEED * deltaT);   // A/D
-        objPos += up  * (m.y * MOVE_SPEED * deltaT);   // R/F
-        objPos += fwd * (m.z * MOVE_SPEED * deltaT);   // W/S f
+        glm::vec3 fwd = glm::normalize(glm::vec3(R * glm::vec4(0,0,-1,0)));
+        glm::vec3 rgt = glm::normalize(glm::vec3(R * glm::vec4(1,0, 0,0)));
+        glm::vec3 up  = glm::normalize(glm::vec3(R * glm::vec4(0,1, 0,0)));
 
-        // Camera (fixed)
-        const float FOVy = glm::radians(60.0f);
-        glm::mat4 Prj  = glm::perspective(FOVy, Ar, 0.1f, 100.0f);
+        camPos += rgt * (m.x * MOVE_SPEED * dt);
+        camPos += up  * (m.y * MOVE_SPEED * dt);
+        camPos += fwd * (m.z * MOVE_SPEED * dt);
+
+        // --- Matrices ---
+        float Ar = float(windowWidth) / float(windowHeight);
+        glm::mat4 Prj = glm::perspective(glm::radians(60.0f), Ar, 0.01f, 200.0f);
         Prj[1][1] *= -1.0f;
-        glm::mat4 View = glm::lookAt(camPos, camPos + glm::vec3(0,0,-1), glm::vec3(0,1,0));
 
-        // Object world transform: T * R * S
-        glm::mat4 T = glm::translate(glm::mat4(1.0f), objPos);
-        glm::mat4 S = glm::scale(glm::mat4(1.0f), glm::vec3(objScale));
-        glm::mat4 World = T * R * S;
+        glm::mat4 View = glm::lookAt(camPos, camPos + fwd, glm::vec3(0,1,0));
 
-        // Global UBO (set=0, binding=0)
-        UBOGlobal g{};
-        g.lightDir      = glm::normalize(glm::vec3(1,2,3));
-        g.lightColor    = glm::vec4(1,1,1,1);
-        g.ambLightColor = glm::vec3(0.1f);
-        g.eyePos        = camPos;
-        DSGubo.map(currentImage, &g, 0);
+        // --- Global UBO ---
+        GlobalUBO g{};
+        g.lightDir   = glm::normalize(glm::vec3(1,2,3));
+        g.lightColor = glm::vec4(1,1,1,1);
+        g.eyePos     = camPos;
 
-        // Local UBO (set=1, binding=0)
-        UBOLocal l{};
-        l.amb    = 1.0f;
-        l.gamma  = 180.0f;
-        l.sColor = glm::vec3(1.0f);
-        l.mMat   = World;
-        l.nMat   = glm::inverse(glm::transpose(World));
-        l.mvpMat = Prj * View * World;
-        //DSObj.map(currentImage, &l, 0);
+        // --- Local UBOs for all instances in technique 0 ---
+        for (int i = 0; i < SC.TI[0].InstanceCount; ++i) {
+            auto &inst = SC.TI[0].I[i];
+
+            LocalUBO l{};
+            l.mMat   = inst.Wm;
+            l.nMat   = glm::inverse(glm::transpose(l.mMat));
+            l.mvpMat = Prj * View * l.mMat;
+
+            // set=0, binding 0 → global UBO
+            inst.DS[0][0]->map(currentImage, &g, 0);
+            // set=1, binding 0 → local UBO
+            inst.DS[0][1]->map(currentImage, &l, 0);
+        }
     }
+
 
     static void populateCommandBufferAccess(VkCommandBuffer commandBuffer, int currentImage, void *params) {
         auto *app = reinterpret_cast<CG_hospital*>(params);
