@@ -1,0 +1,39 @@
+{
+	"models": [
+		{ "id": "M_AC", "VD": "VDsimp", "model": "assets/models/M_Aircondition_01.mgcg", "format": "MGCG" },
+		{ "id": "M_Floor", "VD": "VDsimp", "model": "assets/models/M_Floor_01.mgcg", "format": "MGCG" },
+		{ "id": "M_Wall", "VD":  "VDsimp", "model": "assets/models/M_Wall_01.mgcg", "format":  "MGCG"}
+	],
+	"textures": [
+		{ "id": "T_AC", "texture": "assets/textures/T_Aircondition_01.PNG", "format": "C" },
+		{ "id": "T_Floor", "texture": "assets/textures/T_Floor_01.PNG", "format": "C" },
+		{ "id": "T_Wall", "texture": "assets/textures/T_Wall_01.PNG", "format": "C" },
+		{ "id": "Noise", "texture": "assets/textures/Perlin_noise.png", "format": "C" }
+	],
+	"instances": [
+		{
+			"technique": "Mesh",
+			"elements": [
+				{ "id": "floor",
+					"model": "M_Floor",
+					"texture": ["T_Floor", "Noise"],
+					"translate": [0, 1.2, -3],
+					"scale": [1,1,1]
+				},
+				{ "id": "wall",
+					"model": "M_Wall",
+					"texture": ["T_Wall", "Noise"],
+					"translate": [0, 1.2, -3],
+					"scale": [1,1,1]
+				},
+				{ "id": "AC",
+					"model": "M_AC",
+					"texture": ["T_AC", "Noise"],
+					"translate": [0, 1.2, -3],
+					"scale": [1,1,1]
+				}
+
+			]
+		}
+	]
+}

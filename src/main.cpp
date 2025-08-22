@@ -8,15 +8,6 @@
 #define GLM_FORCE_RADIANS
 #define GLM_FORCE_DEPTH_ZERO_TO_ONE
 
-static void dbgPrintMat4(const glm::mat4 &M, const char *name) {
-    std::cout << name << ":\n";
-    for (int r = 0; r < 4; ++r) {
-        std::cout << "  ";
-        for (int c = 0; c < 4; ++c) std::cout << M[c][r] << " ";
-        std::cout << "\n";
-    }
-}
-
 struct VertexSimp { glm::vec3 pos; glm::vec3 norm; glm::vec2 UV; };
 
 struct GlobalUBO {
@@ -29,6 +20,15 @@ struct LocalUBO {
     alignas(16) glm::mat4 mvpMat;
     alignas(16) glm::mat4 mMat;
     alignas(16) glm::mat4 nMat;
+};
+
+struct OverlayUniformBuffer {
+    alignas(4) float visible;
+};
+
+struct VertexOverlay {
+    alignas(16) glm::vec3 pos;
+    alignas(16) glm::vec2 UV;
 };
 
 class CG_hospital : public BaseProject {
@@ -96,6 +96,7 @@ protected:
             1, 1 }
         });
 
+
         // Vertex layout
         VDsimp.init(this,
         { {0, sizeof(VertexSimp), VK_VERTEX_INPUT_RATE_VERTEX} },
@@ -121,6 +122,7 @@ protected:
         PMesh.setCullMode(VK_CULL_MODE_NONE);
         PMesh.setPolygonMode(VK_POLYGON_MODE_FILL);
 
+
         PRs.resize(1);
         PRs[0].init("Mesh", {
           { &PMesh, { /* set0 (global) */{},
@@ -136,7 +138,7 @@ protected:
         DPSZs.setsInPool          = 3;
 
         std::cout << "\nLoading the scene\n\n";
-        SC.init(this, 1, VDRs, PRs, "assets/models/scene.json");
+        SC.init(this, 1, VDRs, PRs, "assets/models/sceneK.json");
 
         // After SC.init(...)
         if (SC.TechniqueInstanceCount > 0 && SC.TI[0].InstanceCount > 0) {
@@ -194,64 +196,68 @@ protected:
     }
 
     void updateUniformBuffer(uint32_t currentImage) {
-        if (glfwGetKey(window, GLFW_KEY_ESCAPE)) glfwSetWindowShouldClose(window, GL_TRUE);
+            if (glfwGetKey(window, GLFW_KEY_ESCAPE)) glfwSetWindowShouldClose(window, GL_TRUE);
 
-        // --- Inputs (WASD/RF move, arrows/QE rotate) ---
-        float dt = 0.0f; glm::vec3 m(0.0f), r(0.0f); bool fire = false;
-        getSixAxis(dt, m, r, fire);
+            // --- Inputs (same getSixAxis) ---
+            float dt = 0.0f; glm::vec3 m(0.0f), r(0.0f); bool fire = false;
+            getSixAxis(dt, m, r, fire);
 
-        static float yaw   = 0.0f;                 // radians
-        static float pitch = 0.0f;
-        static glm::vec3 camPos = glm::vec3(0.0f, 1.6f, 6.0f);
+            static float yaw   = 0.0f;                 // radians
+            static float pitch = 0.0f;
+            static glm::vec3 camPos = glm::vec3(0.0f, 1.6f, 6.0f);
 
-        const float ROT_SPEED  = glm::radians(90.0f);  // rad/sec
-        const float MOVE_SPEED = 5.0f;                 // m/s (tweak)
+            // Match E09 speeds
+            const float ROT_SPEED         = glm::radians(120.0f);  // rad/sec
+            const float MOVE_SPEED_BASE   = 10.0f;                  // m/s
+            const float MOVE_SPEED_RUN    = 10.0f;                  // m/s
+            const float MOVE_SPEED        = fire ? MOVE_SPEED_RUN : MOVE_SPEED_BASE;
 
-        yaw   -= r.x * ROT_SPEED * dt;
-        pitch -= r.y * ROT_SPEED * dt;
-        pitch  = glm::clamp(pitch, glm::radians(-89.0f), glm::radians(89.0f));
+            // NOTE: E09 maps yaw<-r.y, pitch<-r.x (your version had them swapped)
+            yaw   -= r.y * ROT_SPEED * dt;
+            pitch -= r.x * ROT_SPEED * dt;
+            pitch  = glm::clamp(pitch, glm::radians(-89.0f), glm::radians(89.0f));
 
-        // R = Ry * Rx
-        glm::mat4 Ry = glm::rotate(glm::mat4(1), yaw,   glm::vec3(0,1,0));
-        glm::mat4 Rx = glm::rotate(glm::mat4(1), pitch, glm::vec3(1,0,0));
-        glm::mat4 R  = Ry * Rx;
+            // R = Ry * Rx
+            glm::mat4 Ry = glm::rotate(glm::mat4(1), yaw,   glm::vec3(0,1,0));
+            glm::mat4 Rx = glm::rotate(glm::mat4(1), pitch, glm::vec3(1,0,0));
+            glm::mat4 R  = Ry * Rx;
 
-        glm::vec3 fwd = glm::normalize(glm::vec3(R * glm::vec4(0,0,-1,0)));
-        glm::vec3 rgt = glm::normalize(glm::vec3(R * glm::vec4(1,0, 0,0)));
-        glm::vec3 up  = glm::normalize(glm::vec3(R * glm::vec4(0,1, 0,0)));
+            glm::vec3 fwd = glm::normalize(glm::vec3(R * glm::vec4(0,0,-1,0))); // forward
+            glm::vec3 rgt = glm::normalize(glm::vec3(R * glm::vec4(1,0, 0,0)));
+            glm::vec3 up  = glm::normalize(glm::vec3(R * glm::vec4(0,1, 0,0)));
 
-        camPos += rgt * (m.x * MOVE_SPEED * dt);
-        camPos += up  * (m.y * MOVE_SPEED * dt);
-        camPos += fwd * (m.z * MOVE_SPEED * dt);
+            // Movement: match E09 sign convention (forward is -m.z along forward dir)
+            camPos += rgt * (m.x * MOVE_SPEED * dt);
+            camPos += up  * (m.y * MOVE_SPEED * dt);
+            camPos -= fwd * (m.z * MOVE_SPEED * dt);  // NOTE: minus here to mirror E09
 
-        // --- Matrices ---
-        float Ar = float(windowWidth) / float(windowHeight);
-        glm::mat4 Prj = glm::perspective(glm::radians(60.0f), Ar, 0.01f, 200.0f);
-        Prj[1][1] *= -1.0f;
+            // --- Matrices (unchanged) ---
+            float Ar = float(windowWidth) / float(windowHeight);
+            glm::mat4 Prj = glm::perspective(glm::radians(60.0f), Ar, 0.01f, 200.0f);
+            Prj[1][1] *= -1.0f;
 
-        glm::mat4 View = glm::lookAt(camPos, camPos + fwd, glm::vec3(0,1,0));
+            glm::mat4 View = glm::lookAt(camPos, camPos + fwd, glm::vec3(0,1,0));
 
-        // --- Global UBO ---
-        GlobalUBO g{};
-        g.lightDir   = glm::normalize(glm::vec3(1,2,3));
-        g.lightColor = glm::vec4(1,1,1,1);
-        g.eyePos     = camPos;
+            // --- Global UBO ---
+            GlobalUBO g{};
+            g.lightDir   = glm::normalize(glm::vec3(1,2,3));
+            g.lightColor = glm::vec4(1,1,1,1);
+            g.eyePos     = camPos;
 
-        // --- Local UBOs for all instances in technique 0 ---
-        for (int i = 0; i < SC.TI[0].InstanceCount; ++i) {
-            auto &inst = SC.TI[0].I[i];
+            // --- Local UBOs for all instances in technique 0 ---
+            for (int i = 0; i < SC.TI[0].InstanceCount; ++i) {
+                auto &inst = SC.TI[0].I[i];
 
-            LocalUBO l{};
-            l.mMat   = inst.Wm;
-            l.nMat   = glm::inverse(glm::transpose(l.mMat));
-            l.mvpMat = Prj * View * l.mMat;
+                LocalUBO l{};
+                l.mMat   = inst.Wm;
+                l.nMat   = glm::inverse(glm::transpose(l.mMat));
+                l.mvpMat = Prj * View * l.mMat;
 
-            // set=0, binding 0 → global UBO
-            inst.DS[0][0]->map(currentImage, &g, 0);
-            // set=1, binding 0 → local UBO
-            inst.DS[0][1]->map(currentImage, &l, 0);
-        }
+                inst.DS[0][0]->map(currentImage, &g, 0); // set=0, binding 0 → global UBO
+                inst.DS[0][1]->map(currentImage, &l, 0); // set=1, binding 0 → local UBO
+            }
     }
+
 
 
     static void populateCommandBufferAccess(VkCommandBuffer commandBuffer, int currentImage, void *params) {
