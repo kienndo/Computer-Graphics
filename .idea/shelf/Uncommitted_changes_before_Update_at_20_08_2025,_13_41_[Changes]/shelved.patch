@@ -1,0 +1,345 @@
+Index: src/main.cpp
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.BaseRevisionTextPatchEP
+<+>#include <sstream>\n#include <json.hpp>\n#include \"modules/Starter.hpp\"\n\n// GLM config must be before GLM headers\n#define GLM_FORCE_RADIANS\n#define GLM_FORCE_DEPTH_ZERO_TO_ONE\n#include <glm/glm.hpp>\n#include <glm/gtc/matrix_transform.hpp>\n\nstruct VD {\n    glm::vec3 pos;\n    glm::vec3 norm;\n    glm::vec2 uv;\n};\n\nstruct UBOGlobal {\n    alignas(16) glm::vec3 lightDir;\n    alignas(16) glm::vec4 lightColor;\n    alignas(16) glm::vec3 ambLightColor;\n    alignas(16) glm::vec3 eyePos;\n};\n\nstruct UBOLocal {\n    alignas(4)  float     amb;\n    alignas(4)  float     gamma;\n    alignas(16) glm::vec3 sColor;\n    alignas(16) glm::mat4 mvpMat;\n    alignas(16) glm::mat4 mMat;\n    alignas(16) glm::mat4 nMat;\n};\n\nclass CG_hospital : public BaseProject {\nprotected:\n    float Ar = 4.0f/3.0f;\n\n    RenderPass RP;\n    DescriptorSetLayout DSLGubo, DSLMesh;\n\n    VertexDescriptor VMesh;\n    Pipeline         PMesh;\n\n    DescriptorSet    DSGubo, DSObj;\n    Model            MObj;\n    Texture          TObj;\n\n    // --- Camera (simple fixed cam) ---\n    glm::vec3 camPos{0.0f, 1.4f, 4.0f};\n\n    // --- Object transform state (controlled by keyboard) ---\n    glm::vec3 objPos   {0.0f, 0.0f, 0.0f};\n    float     objYaw   = 0.0f; // around Y\n    float     objPitch = 0.0f; // around X\n    float     objRoll  = 0.0f; // around Z\n    float     objScale = 0.01f;\n\n    // Speeds\n    float MOVE_SPEED = 2.0f;                 // meters/sec\n    float ROT_SPEED  = glm::radians(90.0f);  // rad/sec\n\n    void setWindowParameters() {\n        windowWidth = 1280;\n        windowHeight = 720;\n        windowTitle = \"CG_hospital\";\n        windowResizable = GLFW_TRUE;\n        Ar = float(windowWidth) / float(windowHeight);\n    }\n\n    void onWindowResize(int w, int h) {\n        std::cout << \"Window resized to: \" << w << \" x \" << h << \"\\n\";\n        if (h > 0) Ar = float(w) / float(h);\n        RP.width  = w;\n        RP.height = h;\n    }\n\n    void localInit() {\n        // DSLs\n        DSLMesh.init(this, {\n            { 0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,    VK_SHADER_STAGE_ALL_GRAPHICS, sizeof(UBOLocal), 1 },\n            { 1, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT, 0, 1 }\n        });\n        DSLGubo.init(this, {\n            { 0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,    VK_SHADER_STAGE_ALL_GRAPHICS, sizeof(UBOGlobal), 1 }\n        });\n\n        // Vertex layout\n        VMesh.init(this,\n            { { 0, sizeof(VD), VK_VERTEX_INPUT_RATE_VERTEX } },\n            {\n                { 0, 0, VK_FORMAT_R32G32B32_SFLOAT, offsetof(VD, pos),  sizeof(glm::vec3), POSITION },\n                { 0, 1, VK_FORMAT_R32G32B32_SFLOAT, offsetof(VD, norm), sizeof(glm::vec3), NORMAL   },\n                { 0, 2, VK_FORMAT_R32G32_SFLOAT,    offsetof(VD, uv),   sizeof(glm::vec2), UV       }\n            }\n        );\n\n        RP.init(this);\n\n        PMesh.init(this, &VMesh, \"shaders/Mesh.vert.spv\", \"shaders/Mesh.frag.spv\", { &DSLGubo, &DSLMesh });\n        PMesh.setCullMode(VK_CULL_MODE_NONE); // easier while testing placement\n\n        // Assets\n        MObj.init(this, &VMesh, \"assets/models/M_Aircondition_01.mgcg\", MGCG);\n        TObj.init(this, \"assets/textures/T_Aircondition_01.png\");\n\n        // Pool sizing\n        DPSZs.uniformBlocksInPool = 8;\n        DPSZs.texturesInPool      = 4;\n        DPSZs.setsInPool          = 8;\n    }\n\n    void pipelinesAndDescriptorSetsInit() {\n        RP.create();\n        PMesh.create(&RP);\n\n        DSObj.init(this, &DSLMesh, { TObj.getViewAndSampler() });\n        DSGubo.init(this, &DSLGubo, {});\n\n        // Register CB filler\n        submitCommandBuffer(\"main\", 0, populateCommandBufferAccess, this);\n    }\n\n    void pipelinesAndDescriptorSetsCleanup() {\n        PMesh.cleanup();\n        RP.cleanup();\n        DSGubo.cleanup();\n        DSObj.cleanup();\n    }\n\n    void localCleanup() {\n        TObj.cleanup();\n        MObj.cleanup();\n        DSLGubo.cleanup();\n        DSLMesh.cleanup();\n        PMesh.destroy();\n        RP.destroy();\n    }\n\n    void populateCommandBuffer(VkCommandBuffer cmdBuffer, int currentImage){\n        RP.begin(cmdBuffer, currentImage);\n\n        PMesh.bind(cmdBuffer);\n        DSGubo.bind(cmdBuffer, PMesh, 0, currentImage);\n        MObj.bind(cmdBuffer);\n        DSObj.bind(cmdBuffer, PMesh, 1, currentImage);\n\n        vkCmdDrawIndexed(cmdBuffer, static_cast<uint32_t>(MObj.indices.size()), 1, 0, 0, 0);\n        RP.end(cmdBuffer);\n    }\n\n    void updateUniformBuffer(uint32_t currentImage) {\n        if (glfwGetKey(window, GLFW_KEY_ESCAPE)) {\n            glfwSetWindowShouldClose(window, GL_TRUE);\n        }\n\n        // --- Input axes from Starter.hpp (WASD/RF for move, arrows/QE for rotate)\n        float deltaT = 0.0f;\n        glm::vec3 m(0.0f), r(0.0f);\n        bool fire = false;\n        getSixAxis(deltaT, m, r, fire);\n\n        objYaw   -= r.x * ROT_SPEED * deltaT;\n        objPitch -= r.y * ROT_SPEED * deltaT;\n        objRoll  -= r.z * ROT_SPEED * deltaT;\n\n        objPitch = glm::clamp(objPitch, glm::radians(-89.0f), glm::radians(89.0f));\n\n        // --- Build rotation (Ry * Rx * Rz) for local axes ---\n        glm::mat4 Rx = glm::rotate(glm::mat4(1.0f), objPitch, glm::vec3(1,0,0));\n        glm::mat4 Ry = glm::rotate(glm::mat4(1.0f), objYaw,   glm::vec3(0,1,0));\n        glm::mat4 Rz = glm::rotate(glm::mat4(1.0f), objRoll,  glm::vec3(0,0,1));\n        glm::mat4 R  = Ry * Rx * Rz;\n\n        // Local basis vectors (forward/right/up) from rotation\n        glm::vec3 fwd = glm::vec3(R * glm::vec4(0,0,-1,0));\n        glm::vec3 rgt = glm::vec3(R * glm::vec4(1,0, 0,0));\n        glm::vec3 up  = glm::vec3(R * glm::vec4(0,1, 0,0));\n\n        // Update position (move in object-local space)\n        objPos += rgt * (m.x * MOVE_SPEED * deltaT);   // A/D\n        objPos += up  * (m.y * MOVE_SPEED * deltaT);   // R/F\n        objPos += fwd * (m.z * MOVE_SPEED * deltaT);   // W/S f\n\n        // Camera (fixed)\n        const float FOVy = glm::radians(60.0f);\n        glm::mat4 Prj  = glm::perspective(FOVy, Ar, 0.1f, 100.0f);\n        Prj[1][1] *= -1.0f;\n        glm::mat4 View = glm::lookAt(camPos, camPos + glm::vec3(0,0,-1), glm::vec3(0,1,0));\n\n        // Object world transform: T * R * S\n        glm::mat4 T = glm::translate(glm::mat4(1.0f), objPos);\n        glm::mat4 S = glm::scale(glm::mat4(1.0f), glm::vec3(objScale));\n        glm::mat4 World = T * R * S;\n\n        // Global UBO (set=0, binding=0)\n        UBOGlobal g{};\n        g.lightDir      = glm::normalize(glm::vec3(1,2,3));\n        g.lightColor    = glm::vec4(1,1,1,1);\n        g.ambLightColor = glm::vec3(0.1f);\n        g.eyePos        = camPos;\n        DSGubo.map(currentImage, &g, 0);\n\n        // Local UBO (set=1, binding=0)\n        UBOLocal l{};\n        l.amb    = 1.0f;\n        l.gamma  = 180.0f;\n        l.sColor = glm::vec3(1.0f);\n        l.mMat   = World;\n        l.nMat   = glm::inverse(glm::transpose(World));\n        l.mvpMat = Prj * View * World;\n        DSObj.map(currentImage, &l, 0);\n    }\n\n    static void populateCommandBufferAccess(VkCommandBuffer commandBuffer, int currentImage, void *params) {\n        auto *app = reinterpret_cast<CG_hospital*>(params);\n        app->populateCommandBuffer(commandBuffer, currentImage);\n    }\n};\n\nint main() {\n    CG_hospital app;\n    try { app.run(); }\n    catch (const std::exception& e) { std::cerr << e.what() << std::endl; return EXIT_FAILURE; }\n    return EXIT_SUCCESS;\n}\n
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+diff --git a/src/main.cpp b/src/main.cpp
+--- a/src/main.cpp	(revision aea53a537146cb71d8593e342fb1fceafbe89925)
++++ b/src/main.cpp	(date 1755683638022)
+@@ -1,6 +1,8 @@
+ #include <sstream>
+ #include <json.hpp>
+ #include "modules/Starter.hpp"
++#include <json.hpp>
++#include "modules/Scene.hpp"
+ 
+ // GLM config must be before GLM headers
+ #define GLM_FORCE_RADIANS
+@@ -40,9 +42,14 @@
+     VertexDescriptor VMesh;
+     Pipeline         PMesh;
+ 
+-    DescriptorSet    DSGubo, DSObj;
+-    Model            MObj;
+-    Texture          TObj;
++    DescriptorSet    DSGubo; //, DSObj;
++    //Model            MObj;
++    //Texture          TObj;
++
++    // Several Models
++    Scene SC;
++    std::vector<VertexDescriptorRef> VDRs;
++    std::vector<TechniqueRef>PRs;
+ 
+     // --- Camera (simple fixed cam) ---
+     glm::vec3 camPos{0.0f, 1.4f, 4.0f};
+@@ -76,9 +83,10 @@
+     void localInit() {
+         // DSLs
+         DSLMesh.init(this, {
+-            { 0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,    VK_SHADER_STAGE_ALL_GRAPHICS, sizeof(UBOLocal), 1 },
+-            { 1, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT, 0, 1 }
+-        });
++    { 0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,       VK_SHADER_STAGE_ALL_GRAPHICS, sizeof(UBOLocal), 1 },
++    { 1, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT, 0,               1 }
++});
++
+         DSLGubo.init(this, {
+             { 0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,    VK_SHADER_STAGE_ALL_GRAPHICS, sizeof(UBOGlobal), 1 }
+         });
+@@ -93,28 +101,50 @@
+             }
+         );
+ 
++        VDRs.resize(1); //hva
++        VDRs[0].init("VD", &VMesh);
++
+         RP.init(this);
+ 
+         PMesh.init(this, &VMesh, "shaders/Mesh.vert.spv", "shaders/Mesh.frag.spv", { &DSLGubo, &DSLMesh });
+-        PMesh.setCullMode(VK_CULL_MODE_NONE); // easier while testing placement
++        PMesh.setCullMode(VK_CULL_MODE_NONE);
+ 
+-        // Assets
++        /* Assets
+         MObj.init(this, &VMesh, "assets/models/M_Aircondition_01.mgcg", MGCG);
+-        TObj.init(this, "assets/textures/T_Aircondition_01.png");
++        TObj.init(this, "assets/textures/T_Aircondition_01.png");*/
++
++        PRs.resize(1);
++        PRs[0].init("Mesh", {
++                             {&PMesh, {//Pipeline and DSL for the first pass
++                                 /*DSLglobal*/{},
++                                 /*DSLlocalChar*/{
++                                        /*t0*/{true,  0, {}}// index 0 of the "texture" field in the json file
++                                     }
++                                    }}
++                              }, 1, &VMesh);
+ 
+         // Pool sizing
+         DPSZs.uniformBlocksInPool = 8;
+         DPSZs.texturesInPool      = 4;
+         DPSZs.setsInPool          = 8;
++
++        std::cout << "\nLoading the scene\n\n";
++        if(SC.init(this, 1, VDRs, PRs, "assets/models/scene.json") != 0) {
++            std::cout << "ERROR LOADING THE SCENE\n";
++            exit(0);
++        }
+     }
+ 
+     void pipelinesAndDescriptorSetsInit() {
+         RP.create();
+         PMesh.create(&RP);
+ 
+-        DSObj.init(this, &DSLMesh, { TObj.getViewAndSampler() });
++        //DSObj.init(this, &DSLMesh, { TObj.getViewAndSampler() });
+         DSGubo.init(this, &DSLGubo, {});
+ 
++        SC.pipelinesAndDescriptorSetsInit();
++
++
+         // Register CB filler
+         submitCommandBuffer("main", 0, populateCommandBufferAccess, this);
+     }
+@@ -123,30 +153,44 @@
+         PMesh.cleanup();
+         RP.cleanup();
+         DSGubo.cleanup();
+-        DSObj.cleanup();
++        //DSObj.cleanup();
++
++        SC.pipelinesAndDescriptorSetsCleanup();
+     }
+ 
+     void localCleanup() {
+-        TObj.cleanup();
+-        MObj.cleanup();
++        //TObj.cleanup();
++        //MObj.cleanup();
+         DSLGubo.cleanup();
+         DSLMesh.cleanup();
+         PMesh.destroy();
+         RP.destroy();
++
++        SC.localCleanup();
+     }
+ 
+     void populateCommandBuffer(VkCommandBuffer cmdBuffer, int currentImage){
+         RP.begin(cmdBuffer, currentImage);
+ 
++        // Bind pipeline once; Scene will bind its per-object descriptor sets
+         PMesh.bind(cmdBuffer);
++
++        // Bind the global UBO (set=0 for your pipeline)
+         DSGubo.bind(cmdBuffer, PMesh, 0, currentImage);
+-        MObj.bind(cmdBuffer);
+-        DSObj.bind(cmdBuffer, PMesh, 1, currentImage);
++
++        // Ask the Scene to record draws for all its objects using the technique(s)
++        // One of these should exist in your E09 Scene; use whichever your API exposes:
+ 
+-        vkCmdDrawIndexed(cmdBuffer, static_cast<uint32_t>(MObj.indices.size()), 1, 0, 0, 0);
++        // Option A (common in E09):
++        SC.populateCommandBuffer(cmdBuffer, 0, currentImage);
++
++        // Option B (some templates call it draw):
++        // SC.draw(cmdBuffer, currentImage);
++
+         RP.end(cmdBuffer);
+     }
+ 
++
+     void updateUniformBuffer(uint32_t currentImage) {
+         if (glfwGetKey(window, GLFW_KEY_ESCAPE)) {
+             glfwSetWindowShouldClose(window, GL_TRUE);
+@@ -184,7 +228,8 @@
+         const float FOVy = glm::radians(60.0f);
+         glm::mat4 Prj  = glm::perspective(FOVy, Ar, 0.1f, 100.0f);
+         Prj[1][1] *= -1.0f;
+-        glm::mat4 View = glm::lookAt(camPos, camPos + glm::vec3(0,0,-1), glm::vec3(0,1,0));
++        glm::mat4 View = glm::lookAt(camPos, camPos + glm::vec3(0,0, 1), glm::vec3(0,1,0));
++
+ 
+         // Object world transform: T * R * S
+         glm::mat4 T = glm::translate(glm::mat4(1.0f), objPos);
+@@ -207,7 +252,7 @@
+         l.mMat   = World;
+         l.nMat   = glm::inverse(glm::transpose(World));
+         l.mvpMat = Prj * View * World;
+-        DSObj.map(currentImage, &l, 0);
++        //DSObj.map(currentImage, &l, 0);
+     }
+ 
+     static void populateCommandBufferAccess(VkCommandBuffer commandBuffer, int currentImage, void *params) {
+Index: assets/models/scene.json
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.BaseRevisionTextPatchEP
+<+>{\n\t\"models\": [\n\t\t{ \"id\": \"M_Closestool_01\", \"VD\": \"VDtan\", \"model\": \"assets/models/M_Closestool_01.mgcg\", \"format\": \"MGCG\" },\n\t\t{ \"id\": \"M_Curtain_01\", \"VD\": \"VDtan\", \"model\": \"assets/models/M_Curtain_01.mgcg\", \"format\": \"MGCG\" },\n\t\t{ \"id\": \"M_Door_01\", \"VD\": \"VDtan\", \"model\": \"assets/models/M_Door_01.mgcg\", \"format\": \"MGCG\" },\n\t\t{ \"id\": \"M_Door_02\", \"VD\": \"VDtan\", \"model\": \"assets/models/M_Door_02.mgcg\", \"format\": \"MGCG\" },\n\t\t{ \"id\": \"M_Door_03\", \"VD\": \"VDtan\", \"model\": \"assets/models/M_Door_03.mgcg\", \"format\": \"MGCG\" },\n\t\t{ \"id\": \"M_Floor_01\", \"VD\": \"VDtan\", \"model\": \"assets/models/M_Floor_01.mgcg\", \"format\": \"MGCG\" },\n\t\t{ \"id\": \"M_Folder_01\", \"VD\": \"VDtan\", \"model\": \"assets/models/M_Folder_01.mgcg\", \"format\": \"MGCG\" },\n\t\t{ \"id\": \"M_Handrail_01\", \"VD\": \"VDtan\", \"model\": \"assets/models/M_Handrail_01.mgcg\", \"format\": \"MGCG\" },\n\t\t{ \"id\": \"M_Handrail_02\", \"VD\": \"VDtan\", \"model\": \"assets/models/M_Handrail_02.mgcg\", \"format\": \"MGCG\" },\n\t\t{ \"id\": \"M_Handrail_03\", \"VD\": \"VDtan\", \"model\": \"assets/models/M_Handrail_03.mgcg\", \"format\": \"MGCG\" },\n\t\t{ \"id\": \"M_Handrail_04\", \"VD\": \"VDtan\", \"model\": \"assets/models/M_Handrail_04.mgcg\", \"format\": \"MGCG\" },\n\t\t{ \"id\": \"M_Handrail_05\", \"VD\": \"VDtan\", \"model\": \"assets/models/M_Handrail_05.mgcg\", \"format\": \"MGCG\" },\n\t\t{ \"id\": \"M_NursesStation_01\", \"VD\": \"VDtan\", \"model\": \"assets/models/M_NursesStation_01.mgcg\", \"format\": \"MGCG\" },\n\t\t{ \"id\": \"M_PC_01\", \"VD\": \"VDtan\", \"model\": \"assets/models/M_PC_01.mgcg\", \"format\": \"MGCG\" },\n\t\t{ \"id\": \"M_PC_02\", \"VD\": \"VDtan\", \"model\": \"assets/models/M_PC_02.mgcg\", \"format\": \"MGCG\" },\n\t\t{ \"id\": \"M_Poster_01\", \"VD\": \"VDtan\", \"model\": \"assets/models/M_Poster_01.mgcg\", \"format\": \"MGCG\" },\n\t\t{ \"id\": \"M_PottedPlant_01\", \"VD\": \"VDtan\", \"model\": \"assets/models/M_PottedPlant_01.mgcg\", \"format\": \"MGCG\" },\n\t\t{ \"id\": \"M_PottedPlant_02\", \"VD\": \"VDtan\", \"model\": \"assets/models/M_PottedPlant_02.mgcg\", \"format\": \"MGCG\" },\n\t\t{ \"id\": \"M_Shelf_01\", \"VD\": \"VDtan\", \"model\": \"assets/models/M_Shelf_01.mgcg\", \"format\": \"MGCG\" },\n\t\t{ \"id\": \"M_Shower_01\", \"VD\": \"VDtan\", \"model\": \"assets/models/M_Shower_01.mgcg\", \"format\": \"MGCG\" },\n\t\t{ \"id\": \"M_Sky_01\", \"VD\": \"VDtan\", \"model\": \"assets/models/M_Sky_01.mgcg\", \"format\": \"MGCG\" },\n\t\t{ \"id\": \"M_Socket_01\", \"VD\": \"VDtan\", \"model\": \"assets/models/M_Socket_01.mgcg\", \"format\": \"MGCG\" },\n\t\t{ \"id\": \"M_Sofa_01\", \"VD\": \"VDtan\", \"model\": \"assets/models/M_Sofa_01.mgcg\", \"format\": \"MGCG\" },\n\t\t{ \"id\": \"M_Thing_01\", \"VD\": \"VDtan\", \"model\": \"assets/models/M_Thing_01.mgcg\", \"format\": \"MGCG\" },\n\t\t{ \"id\": \"M_Thing_02\", \"VD\": \"VDtan\", \"model\": \"assets/models/M_Thing_02.mgcg\", \"format\": \"MGCG\" },\n\t\t{ \"id\": \"M_Thing_03\", \"VD\": \"VDtan\", \"model\": \"assets/models/M_Thing_03.mgcg\", \"format\": \"MGCG\" },\n\t\t{ \"id\": \"M_Thing_04\", \"VD\": \"VDtan\", \"model\": \"assets/models/M_Thing_04.mgcg\", \"format\": \"MGCG\" },\n\t\t{ \"id\": \"M_Thing_05\", \"VD\": \"VDtan\", \"model\": \"assets/models/M_Thing_05.mgcg\", \"format\": \"MGCG\" }\n\t],\n\t\"textures\": [\n\t\t{ \"id\": \"M_Closestool_01\", \"texture\": \"assets/textures/M_Closestool_01.png\", \"format\": \"C\" },\n\t\t{ \"id\": \"M_Curtain_01\", \"texture\": \"assets/textures/M_Curtain_01.png\", \"format\": \"C\" },\n\t\t{ \"id\": \"M_Door_01\", \"texture\": \"assets/textures/M_Door_01.png\", \"format\": \"C\" },\n\t\t{ \"id\": \"M_Door_02\", \"texture\": \"assets/textures/M_Door_02.png\", \"format\": \"C\" },\n\t\t{ \"id\": \"M_Door_03\", \"texture\": \"assets/textures/M_Door_03.png\", \"format\": \"C\" },\n\t\t{ \"id\": \"M_Floor_01\", \"texture\": \"assets/textures/M_Floor_01.png\", \"format\": \"C\" },\n\t\t{ \"id\": \"M_Folder_01\", \"texture\": \"assets/textures/M_Folder_01.png\", \"format\": \"C\" },\n\t\t{ \"id\": \"M_Handrail_01\", \"texture\": \"assets/textures/M_Handrail_01.png\", \"format\": \"C\" },\n\t\t{ \"id\": \"M_Handrail_02\", \"texture\": \"assets/textures/M_Handrail_02.png\", \"format\": \"C\" },\n\t\t{ \"id\": \"M_Handrail_03\", \"texture\": \"assets/textures/M_Handrail_03.png\", \"format\": \"C\" },\n\t\t{ \"id\": \"M_Handrail_04\", \"texture\": \"assets/textures/M_Handrail_04.png\", \"format\": \"C\" },\n\t\t{ \"id\": \"M_Handrail_05\", \"texture\": \"assets/textures/M_Handrail_05.png\", \"format\": \"C\" },\n\t\t{ \"id\": \"M_NursesStation_01\", \"texture\": \"assets/textures/M_NursesStation_01.png\", \"format\": \"C\" },\n\t\t{ \"id\": \"M_PC_01\", \"texture\": \"assets/textures/M_PC_01.png\", \"format\": \"C\" },\n\t\t{ \"id\": \"M_PC_02\", \"texture\": \"assets/textures/M_PC_02.png\", \"format\": \"C\" },\n\t\t{ \"id\": \"M_Poster_01\", \"texture\": \"assets/textures/M_Poster_01.png\", \"format\": \"C\" },\n\t\t{ \"id\": \"M_PottedPlant_01\", \"texture\": \"assets/textures/M_PottedPlant_01.png\", \"format\": \"C\" },\n\t\t{ \"id\": \"M_PottedPlant_02\", \"texture\": \"assets/textures/M_PottedPlant_02.png\", \"format\": \"C\" },\n\t\t{ \"id\": \"M_Shelf_01\", \"texture\": \"assets/textures/M_Shelf_01.png\", \"format\": \"C\" },\n\t\t{ \"id\": \"M_Shower_01\", \"texture\": \"assets/textures/M_Shower_01.png\", \"format\": \"C\" },\n\t\t{ \"id\": \"M_Sky_01\", \"texture\": \"assets/textures/M_Sky_01.png\", \"format\": \"C\" },\n\t\t{ \"id\": \"M_Socket_01\", \"texture\": \"assets/textures/M_Socket_01.png\", \"format\": \"C\" },\n\t\t{ \"id\": \"M_Sofa_01\", \"texture\": \"assets/textures/M_Sofa_01.png\", \"format\": \"C\" },\n\t\t{ \"id\": \"M_Thing_01\", \"texture\": \"assets/textures/M_Thing_01.png\", \"format\": \"C\" },\n\t\t{ \"id\": \"M_Thing_02\", \"texture\": \"assets/textures/M_Thing_02.png\", \"format\": \"C\" },\n\t\t{ \"id\": \"M_Thing_03\", \"texture\": \"assets/textures/M_Thing_03.png\", \"format\": \"C\" },\n\t\t{ \"id\": \"M_Thing_04\", \"texture\": \"assets/textures/M_Thing_04.png\", \"format\": \"C\" },\n\t\t{ \"id\": \"M_Thing_05\", \"texture\": \"assets/textures/M_Thing_05.png\", \"format\": \"C\" }\n\t],\n\t\"instances\": [\n\t\t{\n\t\t\t\"technique\": \"PBR\",\n\t\t\t\"elements\": [\n\t\t\t\t{ \"id\": \"inst_M_Closestool_01\", \"model\": \"M_Closestool_01\", \"texture\": [\"M_Closestool_01\"] },\n\t\t\t\t{ \"id\": \"inst_M_Curtain_01\", \"model\": \"M_Curtain_01\", \"texture\": [\"M_Curtain_01\"] },\n\t\t\t\t{ \"id\": \"inst_M_Door_01\", \"model\": \"M_Door_01\", \"texture\": [\"M_Door_01\"] },\n\t\t\t\t{ \"id\": \"inst_M_Door_02\", \"model\": \"M_Door_02\", \"texture\": [\"M_Door_02\"] },\n\t\t\t\t{ \"id\": \"inst_M_Door_03\", \"model\": \"M_Door_03\", \"texture\": [\"M_Door_03\"] },\n\t\t\t\t{ \"id\": \"inst_M_Floor_01\", \"model\": \"M_Floor_01\", \"texture\": [\"M_Floor_01\"] },\n\t\t\t\t{ \"id\": \"inst_M_Folder_01\", \"model\": \"M_Folder_01\", \"texture\": [\"M_Folder_01\"] },\n\t\t\t\t{ \"id\": \"inst_M_Handrail_01\", \"model\": \"M_Handrail_01\", \"texture\": [\"M_Handrail_01\"] },\n\t\t\t\t{ \"id\": \"inst_M_Handrail_02\", \"model\": \"M_Handrail_02\", \"texture\": [\"M_Handrail_02\"] },\n\t\t\t\t{ \"id\": \"inst_M_Handrail_03\", \"model\": \"M_Handrail_03\", \"texture\": [\"M_Handrail_03\"] },\n\t\t\t\t{ \"id\": \"inst_M_Handrail_04\", \"model\": \"M_Handrail_04\", \"texture\": [\"M_Handrail_04\"] },\n\t\t\t\t{ \"id\": \"inst_M_Handrail_05\", \"model\": \"M_Handrail_05\", \"texture\": [\"M_Handrail_05\"] },\n\t\t\t\t{ \"id\": \"inst_M_NursesStation_01\", \"model\": \"M_NursesStation_01\", \"texture\": [\"M_NursesStation_01\"] },\n\t\t\t\t{ \"id\": \"inst_M_PC_01\", \"model\": \"M_PC_01\", \"texture\": [\"M_PC_01\"] },\n\t\t\t\t{ \"id\": \"inst_M_PC_02\", \"model\": \"M_PC_02\", \"texture\": [\"M_PC_02\"] },\n\t\t\t\t{ \"id\": \"inst_M_Poster_01\", \"model\": \"M_Poster_01\", \"texture\": [\"M_Poster_01\"] },\n\t\t\t\t{ \"id\": \"inst_M_PottedPlant_01\", \"model\": \"M_PottedPlant_01\", \"texture\": [\"M_PottedPlant_01\"] },\n\t\t\t\t{ \"id\": \"inst_M_PottedPlant_02\", \"model\": \"M_PottedPlant_02\", \"texture\": [\"M_PottedPlant_02\"] },\n\t\t\t\t{ \"id\": \"inst_M_Shelf_01\", \"model\": \"M_Shelf_01\", \"texture\": [\"M_Shelf_01\"] },\n\t\t\t\t{ \"id\": \"inst_M_Shower_01\", \"model\": \"M_Shower_01\", \"texture\": [\"M_Shower_01\"] },\n\t\t\t\t{ \"id\": \"inst_M_Sky_01\", \"model\": \"M_Sky_01\", \"texture\": [\"M_Sky_01\"] },\n\t\t\t\t{ \"id\": \"inst_M_Socket_01\", \"model\": \"M_Socket_01\", \"texture\": [\"M_Socket_01\"] },\n\t\t\t\t{ \"id\": \"inst_M_Sofa_01\", \"model\": \"M_Sofa_01\", \"texture\": [\"M_Sofa_01\"] },\n\t\t\t\t{ \"id\": \"inst_M_Thing_01\", \"model\": \"M_Thing_01\", \"texture\": [\"M_Thing_01\"] },\n\t\t\t\t{ \"id\": \"inst_M_Thing_02\", \"model\": \"M_Thing_02\", \"texture\": [\"M_Thing_02\"] },\n\t\t\t\t{ \"id\": \"inst_M_Thing_03\", \"model\": \"M_Thing_03\", \"texture\": [\"M_Thing_03\"] },\n\t\t\t\t{ \"id\": \"inst_M_Thing_04\", \"model\": \"M_Thing_04\", \"texture\": [\"M_Thing_04\"] },\n\t\t\t\t{ \"id\": \"inst_M_Thing_05\", \"model\": \"M_Thing_05\", \"texture\": [\"M_Thing_05\"] }\n\t\t\t]\n\t\t}\n\t]\n}\n
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+diff --git a/assets/models/scene.json b/assets/models/scene.json
+--- a/assets/models/scene.json	(revision aea53a537146cb71d8593e342fb1fceafbe89925)
++++ b/assets/models/scene.json	(date 1755689408748)
+@@ -1,97 +1,37 @@
+ {
++	"assetfiles": [],
+ 	"models": [
+-		{ "id": "M_Closestool_01", "VD": "VDtan", "model": "assets/models/M_Closestool_01.mgcg", "format": "MGCG" },
+-		{ "id": "M_Curtain_01", "VD": "VDtan", "model": "assets/models/M_Curtain_01.mgcg", "format": "MGCG" },
+-		{ "id": "M_Door_01", "VD": "VDtan", "model": "assets/models/M_Door_01.mgcg", "format": "MGCG" },
+-		{ "id": "M_Door_02", "VD": "VDtan", "model": "assets/models/M_Door_02.mgcg", "format": "MGCG" },
+-		{ "id": "M_Door_03", "VD": "VDtan", "model": "assets/models/M_Door_03.mgcg", "format": "MGCG" },
+-		{ "id": "M_Floor_01", "VD": "VDtan", "model": "assets/models/M_Floor_01.mgcg", "format": "MGCG" },
+-		{ "id": "M_Folder_01", "VD": "VDtan", "model": "assets/models/M_Folder_01.mgcg", "format": "MGCG" },
+-		{ "id": "M_Handrail_01", "VD": "VDtan", "model": "assets/models/M_Handrail_01.mgcg", "format": "MGCG" },
+-		{ "id": "M_Handrail_02", "VD": "VDtan", "model": "assets/models/M_Handrail_02.mgcg", "format": "MGCG" },
+-		{ "id": "M_Handrail_03", "VD": "VDtan", "model": "assets/models/M_Handrail_03.mgcg", "format": "MGCG" },
+-		{ "id": "M_Handrail_04", "VD": "VDtan", "model": "assets/models/M_Handrail_04.mgcg", "format": "MGCG" },
+-		{ "id": "M_Handrail_05", "VD": "VDtan", "model": "assets/models/M_Handrail_05.mgcg", "format": "MGCG" },
+-		{ "id": "M_NursesStation_01", "VD": "VDtan", "model": "assets/models/M_NursesStation_01.mgcg", "format": "MGCG" },
+-		{ "id": "M_PC_01", "VD": "VDtan", "model": "assets/models/M_PC_01.mgcg", "format": "MGCG" },
+-		{ "id": "M_PC_02", "VD": "VDtan", "model": "assets/models/M_PC_02.mgcg", "format": "MGCG" },
+-		{ "id": "M_Poster_01", "VD": "VDtan", "model": "assets/models/M_Poster_01.mgcg", "format": "MGCG" },
+-		{ "id": "M_PottedPlant_01", "VD": "VDtan", "model": "assets/models/M_PottedPlant_01.mgcg", "format": "MGCG" },
+-		{ "id": "M_PottedPlant_02", "VD": "VDtan", "model": "assets/models/M_PottedPlant_02.mgcg", "format": "MGCG" },
+-		{ "id": "M_Shelf_01", "VD": "VDtan", "model": "assets/models/M_Shelf_01.mgcg", "format": "MGCG" },
+-		{ "id": "M_Shower_01", "VD": "VDtan", "model": "assets/models/M_Shower_01.mgcg", "format": "MGCG" },
+-		{ "id": "M_Sky_01", "VD": "VDtan", "model": "assets/models/M_Sky_01.mgcg", "format": "MGCG" },
+-		{ "id": "M_Socket_01", "VD": "VDtan", "model": "assets/models/M_Socket_01.mgcg", "format": "MGCG" },
+-		{ "id": "M_Sofa_01", "VD": "VDtan", "model": "assets/models/M_Sofa_01.mgcg", "format": "MGCG" },
+-		{ "id": "M_Thing_01", "VD": "VDtan", "model": "assets/models/M_Thing_01.mgcg", "format": "MGCG" },
+-		{ "id": "M_Thing_02", "VD": "VDtan", "model": "assets/models/M_Thing_02.mgcg", "format": "MGCG" },
+-		{ "id": "M_Thing_03", "VD": "VDtan", "model": "assets/models/M_Thing_03.mgcg", "format": "MGCG" },
+-		{ "id": "M_Thing_04", "VD": "VDtan", "model": "assets/models/M_Thing_04.mgcg", "format": "MGCG" },
+-		{ "id": "M_Thing_05", "VD": "VDtan", "model": "assets/models/M_Thing_05.mgcg", "format": "MGCG" }
++		{ "id": "ac",  "VD": "VD", "model": "assets/models/M_Aircondition_01.mgcg", "format": "MGCG" },
++		{ "id": "cab", "VD": "VD", "model": "assets/models/M_Cabinet_01.mgcg",     "format": "MGCG" }
+ 	],
+ 	"textures": [
+-		{ "id": "M_Closestool_01", "texture": "assets/textures/M_Closestool_01.png", "format": "C" },
+-		{ "id": "M_Curtain_01", "texture": "assets/textures/M_Curtain_01.png", "format": "C" },
+-		{ "id": "M_Door_01", "texture": "assets/textures/M_Door_01.png", "format": "C" },
+-		{ "id": "M_Door_02", "texture": "assets/textures/M_Door_02.png", "format": "C" },
+-		{ "id": "M_Door_03", "texture": "assets/textures/M_Door_03.png", "format": "C" },
+-		{ "id": "M_Floor_01", "texture": "assets/textures/M_Floor_01.png", "format": "C" },
+-		{ "id": "M_Folder_01", "texture": "assets/textures/M_Folder_01.png", "format": "C" },
+-		{ "id": "M_Handrail_01", "texture": "assets/textures/M_Handrail_01.png", "format": "C" },
+-		{ "id": "M_Handrail_02", "texture": "assets/textures/M_Handrail_02.png", "format": "C" },
+-		{ "id": "M_Handrail_03", "texture": "assets/textures/M_Handrail_03.png", "format": "C" },
+-		{ "id": "M_Handrail_04", "texture": "assets/textures/M_Handrail_04.png", "format": "C" },
+-		{ "id": "M_Handrail_05", "texture": "assets/textures/M_Handrail_05.png", "format": "C" },
+-		{ "id": "M_NursesStation_01", "texture": "assets/textures/M_NursesStation_01.png", "format": "C" },
+-		{ "id": "M_PC_01", "texture": "assets/textures/M_PC_01.png", "format": "C" },
+-		{ "id": "M_PC_02", "texture": "assets/textures/M_PC_02.png", "format": "C" },
+-		{ "id": "M_Poster_01", "texture": "assets/textures/M_Poster_01.png", "format": "C" },
+-		{ "id": "M_PottedPlant_01", "texture": "assets/textures/M_PottedPlant_01.png", "format": "C" },
+-		{ "id": "M_PottedPlant_02", "texture": "assets/textures/M_PottedPlant_02.png", "format": "C" },
+-		{ "id": "M_Shelf_01", "texture": "assets/textures/M_Shelf_01.png", "format": "C" },
+-		{ "id": "M_Shower_01", "texture": "assets/textures/M_Shower_01.png", "format": "C" },
+-		{ "id": "M_Sky_01", "texture": "assets/textures/M_Sky_01.png", "format": "C" },
+-		{ "id": "M_Socket_01", "texture": "assets/textures/M_Socket_01.png", "format": "C" },
+-		{ "id": "M_Sofa_01", "texture": "assets/textures/M_Sofa_01.png", "format": "C" },
+-		{ "id": "M_Thing_01", "texture": "assets/textures/M_Thing_01.png", "format": "C" },
+-		{ "id": "M_Thing_02", "texture": "assets/textures/M_Thing_02.png", "format": "C" },
+-		{ "id": "M_Thing_03", "texture": "assets/textures/M_Thing_03.png", "format": "C" },
+-		{ "id": "M_Thing_04", "texture": "assets/textures/M_Thing_04.png", "format": "C" },
+-		{ "id": "M_Thing_05", "texture": "assets/textures/M_Thing_05.png", "format": "C" }
++		{ "id": "acTex",  "texture": "assets/textures/T_Aircondition_01.png", "format": "C" },
++		{ "id": "cabTex", "texture": "assets/textures/T_Cabinet_01.png",      "format": "C" }
+ 	],
+ 	"instances": [
+ 		{
+-			"technique": "PBR",
++			"technique": "Mesh",
+ 			"elements": [
+-				{ "id": "inst_M_Closestool_01", "model": "M_Closestool_01", "texture": ["M_Closestool_01"] },
+-				{ "id": "inst_M_Curtain_01", "model": "M_Curtain_01", "texture": ["M_Curtain_01"] },
+-				{ "id": "inst_M_Door_01", "model": "M_Door_01", "texture": ["M_Door_01"] },
+-				{ "id": "inst_M_Door_02", "model": "M_Door_02", "texture": ["M_Door_02"] },
+-				{ "id": "inst_M_Door_03", "model": "M_Door_03", "texture": ["M_Door_03"] },
+-				{ "id": "inst_M_Floor_01", "model": "M_Floor_01", "texture": ["M_Floor_01"] },
+-				{ "id": "inst_M_Folder_01", "model": "M_Folder_01", "texture": ["M_Folder_01"] },
+-				{ "id": "inst_M_Handrail_01", "model": "M_Handrail_01", "texture": ["M_Handrail_01"] },
+-				{ "id": "inst_M_Handrail_02", "model": "M_Handrail_02", "texture": ["M_Handrail_02"] },
+-				{ "id": "inst_M_Handrail_03", "model": "M_Handrail_03", "texture": ["M_Handrail_03"] },
+-				{ "id": "inst_M_Handrail_04", "model": "M_Handrail_04", "texture": ["M_Handrail_04"] },
+-				{ "id": "inst_M_Handrail_05", "model": "M_Handrail_05", "texture": ["M_Handrail_05"] },
+-				{ "id": "inst_M_NursesStation_01", "model": "M_NursesStation_01", "texture": ["M_NursesStation_01"] },
+-				{ "id": "inst_M_PC_01", "model": "M_PC_01", "texture": ["M_PC_01"] },
+-				{ "id": "inst_M_PC_02", "model": "M_PC_02", "texture": ["M_PC_02"] },
+-				{ "id": "inst_M_Poster_01", "model": "M_Poster_01", "texture": ["M_Poster_01"] },
+-				{ "id": "inst_M_PottedPlant_01", "model": "M_PottedPlant_01", "texture": ["M_PottedPlant_01"] },
+-				{ "id": "inst_M_PottedPlant_02", "model": "M_PottedPlant_02", "texture": ["M_PottedPlant_02"] },
+-				{ "id": "inst_M_Shelf_01", "model": "M_Shelf_01", "texture": ["M_Shelf_01"] },
+-				{ "id": "inst_M_Shower_01", "model": "M_Shower_01", "texture": ["M_Shower_01"] },
+-				{ "id": "inst_M_Sky_01", "model": "M_Sky_01", "texture": ["M_Sky_01"] },
+-				{ "id": "inst_M_Socket_01", "model": "M_Socket_01", "texture": ["M_Socket_01"] },
+-				{ "id": "inst_M_Sofa_01", "model": "M_Sofa_01", "texture": ["M_Sofa_01"] },
+-				{ "id": "inst_M_Thing_01", "model": "M_Thing_01", "texture": ["M_Thing_01"] },
+-				{ "id": "inst_M_Thing_02", "model": "M_Thing_02", "texture": ["M_Thing_02"] },
+-				{ "id": "inst_M_Thing_03", "model": "M_Thing_03", "texture": ["M_Thing_03"] },
+-				{ "id": "inst_M_Thing_04", "model": "M_Thing_04", "texture": ["M_Thing_04"] },
+-				{ "id": "inst_M_Thing_05", "model": "M_Thing_05", "texture": ["M_Thing_05"] }
++				{
++					"id": "AC01",
++					"model": "ac",
++					"texture": ["acTex"],
++					"translation": [0.0, 1.8, -1.2],
++					"rotation":    [0.0, 90.0, 0.0],
++					"scaling":     [0.01, 0.01, 0.01]
++				},
++				{
++					"id": "CAB01",
++					"model": "cab",
++					"texture": ["cabTex"],
++					"translation": [1.2, 0.0, -2.0],
++					"rotation":    [0.0, 0.0, 0.0],
++					"scaling":     [0.01, 0.01, 0.01]
++				}
+ 			]
+ 		}
++
+ 	]
+ }
++
++
+Index: .idea/workspace.xml
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.BaseRevisionTextPatchEP
+<+><?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<project version=\"4\">\n  <component name=\"AutoImportSettings\">\n    <option name=\"autoReloadType\" value=\"SELECTIVE\" />\n  </component>\n  <component name=\"BackendCodeEditorMiscSettings\">\n    <option name=\"/Default/Housekeeping/FeatureSuggestion/FeatureSuggestionManager/DisabledSuggesters/=SwitchToGoToActionSuggester/@EntryIndexedValue\" value=\"true\" type=\"bool\" />\n    <option name=\"/Default/Housekeeping/GlobalSettingsUpgraded/IsUpgraded/@EntryValue\" value=\"true\" type=\"bool\" />\n    <option name=\"/Default/RiderDebugger/RiderRestoreDecompile/RestoreDecompileSetting/@EntryValue\" value=\"false\" type=\"bool\" />\n  </component>\n  <component name=\"CMakePresetLoader\">{\n  &quot;useNewFormat&quot;: true\n}</component>\n  <component name=\"CMakeProjectFlavorService\">\n    <option name=\"flavorId\" value=\"CMakePlainProjectFlavor\" />\n  </component>\n  <component name=\"CMakeReloadState\">\n    <option name=\"reloaded\" value=\"true\" />\n  </component>\n  <component name=\"CMakeRunConfigurationManager\">\n    <generated>\n      <config projectName=\"CG_hospital\" targetName=\"CG_hospital_Shaders\" />\n      <config projectName=\"CG_hospital\" targetName=\"CG_hospital\" />\n    </generated>\n  </component>\n  <component name=\"CMakeSettings\">\n    <configurations>\n      <configuration PROFILE_NAME=\"Debug\" ENABLED=\"true\" CONFIG_NAME=\"Debug\" />\n    </configurations>\n  </component>\n  <component name=\"ChangeListManager\">\n    <list default=\"true\" id=\"72edde42-13d2-4df3-b1df-094f5281efff\" name=\"Changes\" comment=\"\">\n      <change afterPath=\"$PROJECT_DIR$/shaders/Mesh.frag\" afterDir=\"false\" />\n      <change afterPath=\"$PROJECT_DIR$/shaders/Mesh.vert\" afterDir=\"false\" />\n      <change beforePath=\"$PROJECT_DIR$/.idea/editor.xml\" beforeDir=\"false\" afterPath=\"$PROJECT_DIR$/.idea/editor.xml\" afterDir=\"false\" />\n      <change beforePath=\"$PROJECT_DIR$/.idea/workspace.xml\" beforeDir=\"false\" afterPath=\"$PROJECT_DIR$/.idea/workspace.xml\" afterDir=\"false\" />\n      <change beforePath=\"$PROJECT_DIR$/CMakeLists.txt\" beforeDir=\"false\" afterPath=\"$PROJECT_DIR$/CMakeLists.txt\" afterDir=\"false\" />\n      <change beforePath=\"$PROJECT_DIR$/assets/models/scene.json\" beforeDir=\"false\" afterPath=\"$PROJECT_DIR$/assets/models/scene.json\" afterDir=\"false\" />\n      <change beforePath=\"$PROJECT_DIR$/shaders/ShaderFrag.frag\" beforeDir=\"false\" />\n      <change beforePath=\"$PROJECT_DIR$/shaders/ShaderFrag.spv\" beforeDir=\"false\" />\n      <change beforePath=\"$PROJECT_DIR$/shaders/ShaderVert.spv\" beforeDir=\"false\" />\n      <change beforePath=\"$PROJECT_DIR$/shaders/ShaderVert.vert\" beforeDir=\"false\" />\n      <change beforePath=\"$PROJECT_DIR$/src/main.cpp\" beforeDir=\"false\" afterPath=\"$PROJECT_DIR$/src/main.cpp\" afterDir=\"false\" />\n    </list>\n    <option name=\"SHOW_DIALOG\" value=\"false\" />\n    <option name=\"HIGHLIGHT_CONFLICTS\" value=\"true\" />\n    <option name=\"HIGHLIGHT_NON_ACTIVE_CHANGELIST\" value=\"false\" />\n    <option name=\"LAST_RESOLUTION\" value=\"IGNORE\" />\n  </component>\n  <component name=\"ClangdSettings\">\n    <option name=\"formatViaClangd\" value=\"false\" />\n  </component>\n  <component name=\"ExecutionTargetManager\" SELECTED_TARGET=\"CMakeBuildProfile:Debug\" />\n  <component name=\"Git.Settings\">\n    <option name=\"RECENT_GIT_ROOT_PATH\" value=\"$PROJECT_DIR$\" />\n  </component>\n  <component name=\"ProjectApplicationVersion\">\n    <option name=\"ide\" value=\"CLion\" />\n    <option name=\"majorVersion\" value=\"2025\" />\n    <option name=\"minorVersion\" value=\"1.4\" />\n    <option name=\"productBranch\" value=\"Classic\" />\n  </component>\n  <component name=\"ProjectColorInfo\">{\n  &quot;customColor&quot;: &quot;&quot;,\n  &quot;associatedIndex&quot;: 3\n}</component>\n  <component name=\"ProjectId\" id=\"30eV670x9jIoaIwUGUL1kPC6Ihi\" />\n  <component name=\"ProjectViewState\">\n    <option name=\"hideEmptyMiddlePackages\" value=\"true\" />\n    <option name=\"showLibraryContents\" value=\"true\" />\n  </component>\n  <component name=\"PropertiesComponent\">{\n  &quot;keyToString&quot;: {\n    &quot;CMake Application.CG_hospital.executor&quot;: &quot;Run&quot;,\n    &quot;ModuleVcsDetector.initialDetectionPerformed&quot;: &quot;true&quot;,\n    &quot;RunOnceActivity.RadMigrateCodeStyle&quot;: &quot;true&quot;,\n    &quot;RunOnceActivity.ShowReadmeOnStart&quot;: &quot;true&quot;,\n    &quot;RunOnceActivity.cidr.known.project.marker&quot;: &quot;true&quot;,\n    &quot;RunOnceActivity.git.unshallow&quot;: &quot;true&quot;,\n    &quot;RunOnceActivity.readMode.enableVisualFormatting&quot;: &quot;true&quot;,\n    &quot;RunOnceActivity.west.config.association.type.startup.service&quot;: &quot;true&quot;,\n    &quot;SHARE_PROJECT_CONFIGURATION_FILES&quot;: &quot;true&quot;,\n    &quot;cf.first.check.clang-format&quot;: &quot;false&quot;,\n    &quot;cidr.known.project.marker&quot;: &quot;true&quot;,\n    &quot;git-widget-placeholder&quot;: &quot;main&quot;,\n    &quot;node.js.detected.package.eslint&quot;: &quot;true&quot;,\n    &quot;node.js.detected.package.tslint&quot;: &quot;true&quot;,\n    &quot;node.js.selected.package.eslint&quot;: &quot;(autodetect)&quot;,\n    &quot;node.js.selected.package.tslint&quot;: &quot;(autodetect)&quot;,\n    &quot;nodejs_package_manager_path&quot;: &quot;npm&quot;,\n    &quot;vue.rearranger.settings.migration&quot;: &quot;true&quot;\n  }\n}</component>\n  <component name=\"RunManager\" selected=\"CMake Application.CG_hospital\">\n    <configuration default=\"true\" type=\"CLionExternalRunConfiguration\" factoryName=\"Application\" REDIRECT_INPUT=\"false\" ELEVATE=\"false\" USE_EXTERNAL_CONSOLE=\"false\" EMULATE_TERMINAL=\"false\" PASS_PARENT_ENVS_2=\"true\">\n      <method v=\"2\">\n        <option name=\"CLION.EXTERNAL.BUILD\" enabled=\"true\" />\n      </method>\n    </configuration>\n    <configuration name=\"CG_hospital\" type=\"CMakeRunConfiguration\" factoryName=\"Application\" REDIRECT_INPUT=\"false\" ELEVATE=\"false\" USE_EXTERNAL_CONSOLE=\"false\" EMULATE_TERMINAL=\"false\" PASS_PARENT_ENVS_2=\"true\" PROJECT_NAME=\"CG_hospital\" TARGET_NAME=\"CG_hospital\" CONFIG_NAME=\"Debug\" RUN_TARGET_PROJECT_NAME=\"CG_hospital\" RUN_TARGET_NAME=\"CG_hospital\">\n      <method v=\"2\">\n        <option name=\"com.jetbrains.cidr.execution.CidrBuildBeforeRunTaskProvider$BuildBeforeRunTask\" enabled=\"true\" />\n      </method>\n    </configuration>\n    <configuration name=\"CG_hospital_Shaders\" type=\"CMakeRunConfiguration\" factoryName=\"Application\" REDIRECT_INPUT=\"false\" ELEVATE=\"false\" USE_EXTERNAL_CONSOLE=\"false\" EMULATE_TERMINAL=\"false\" PASS_PARENT_ENVS_2=\"true\" PROJECT_NAME=\"CG_hospital\" TARGET_NAME=\"CG_hospital_Shaders\" CONFIG_NAME=\"Debug\">\n      <method v=\"2\">\n        <option name=\"com.jetbrains.cidr.execution.CidrBuildBeforeRunTaskProvider$BuildBeforeRunTask\" enabled=\"true\" />\n      </method>\n    </configuration>\n    <list>\n      <item itemvalue=\"CMake Application.CG_hospital\" />\n      <item itemvalue=\"CMake Application.CG_hospital_Shaders\" />\n    </list>\n  </component>\n  <component name=\"TaskManager\">\n    <task active=\"true\" id=\"Default\" summary=\"Default task\">\n      <changelist id=\"72edde42-13d2-4df3-b1df-094f5281efff\" name=\"Changes\" comment=\"\" />\n      <created>1753987846939</created>\n      <option name=\"number\" value=\"Default\" />\n      <option name=\"presentableId\" value=\"Default\" />\n      <updated>1753987846939</updated>\n      <workItem from=\"1753987848772\" duration=\"3337000\" />\n      <workItem from=\"1754242465351\" duration=\"1544000\" />\n      <workItem from=\"1755098209073\" duration=\"541000\" />\n      <workItem from=\"1755591599800\" duration=\"13927000\" />\n    </task>\n    <servers />\n  </component>\n  <component name=\"TypeScriptGeneratedFilesManager\">\n    <option name=\"version\" value=\"3\" />\n  </component>\n  <component name=\"UnknownFeatures\">\n    <option featureType=\"com.intellij.fileTypeFactory\" implementationName=\"*.frag\" />\n  </component>\n  <component name=\"VCPKGProject\">\n    <isAutomaticCheckingOnLaunch value=\"false\" />\n    <isAutomaticFoundErrors value=\"true\" />\n    <isAutomaticReloadCMake value=\"true\" />\n  </component>\n  <component name=\"Vcs.Log.Tabs.Properties\">\n    <option name=\"TAB_STATES\">\n      <map>\n        <entry key=\"MAIN\">\n          <value>\n            <State />\n          </value>\n        </entry>\n      </map>\n    </option>\n  </component>\n</project>
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+diff --git a/.idea/workspace.xml b/.idea/workspace.xml
+--- a/.idea/workspace.xml	(revision aea53a537146cb71d8593e342fb1fceafbe89925)
++++ b/.idea/workspace.xml	(date 1755689777377)
+@@ -30,16 +30,7 @@
+   </component>
+   <component name="ChangeListManager">
+     <list default="true" id="72edde42-13d2-4df3-b1df-094f5281efff" name="Changes" comment="">
+-      <change afterPath="$PROJECT_DIR$/shaders/Mesh.frag" afterDir="false" />
+-      <change afterPath="$PROJECT_DIR$/shaders/Mesh.vert" afterDir="false" />
+-      <change beforePath="$PROJECT_DIR$/.idea/editor.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/editor.xml" afterDir="false" />
+-      <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
+-      <change beforePath="$PROJECT_DIR$/CMakeLists.txt" beforeDir="false" afterPath="$PROJECT_DIR$/CMakeLists.txt" afterDir="false" />
+       <change beforePath="$PROJECT_DIR$/assets/models/scene.json" beforeDir="false" afterPath="$PROJECT_DIR$/assets/models/scene.json" afterDir="false" />
+-      <change beforePath="$PROJECT_DIR$/shaders/ShaderFrag.frag" beforeDir="false" />
+-      <change beforePath="$PROJECT_DIR$/shaders/ShaderFrag.spv" beforeDir="false" />
+-      <change beforePath="$PROJECT_DIR$/shaders/ShaderVert.spv" beforeDir="false" />
+-      <change beforePath="$PROJECT_DIR$/shaders/ShaderVert.vert" beforeDir="false" />
+       <change beforePath="$PROJECT_DIR$/src/main.cpp" beforeDir="false" afterPath="$PROJECT_DIR$/src/main.cpp" afterDir="false" />
+     </list>
+     <option name="SHOW_DIALOG" value="false" />
+@@ -122,7 +113,7 @@
+       <workItem from="1753987848772" duration="3337000" />
+       <workItem from="1754242465351" duration="1544000" />
+       <workItem from="1755098209073" duration="541000" />
+-      <workItem from="1755591599800" duration="13927000" />
++      <workItem from="1755591599800" duration="22966000" />
+     </task>
+     <servers />
+   </component>
