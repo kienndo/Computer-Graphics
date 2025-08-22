@@ -138,17 +138,7 @@ protected:
         DPSZs.setsInPool          = 3;
 
         std::cout << "\nLoading the scene\n\n";
-        SC.init(this, 1, VDRs, PRs, "assets/models/sceneK.json");
-
-        // After SC.init(...)
-        if (SC.TechniqueInstanceCount > 0 && SC.TI[0].InstanceCount > 0) {
-            for (int i = 0; i < SC.TI[0].InstanceCount; ++i) {
-                auto &inst = SC.TI[0].I[i];
-                // Scale it down and push it in front of the camera
-                inst.Wm = glm::translate(glm::mat4(1.0f), glm::vec3(0.0f, 1.2f, -5.0f))
-                        * glm::scale(glm::mat4(1.0f),    glm::vec3(0.1f)); // adjust 0.1f as needed
-            }
-        }
+        SC.init(this, 1, VDRs, PRs, "assets/models/scene.json");
     }
 
     void pipelinesAndDescriptorSetsInit() {
