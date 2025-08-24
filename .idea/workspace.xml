@@ -30,36 +30,12 @@
   </component>
   <component name="ChangeListManager">
     <list default="true" id="72edde42-13d2-4df3-b1df-094f5281efff" name="Changes" comment="one aircondition through scene.json works">
-      <change afterPath="$PROJECT_DIR$/assets/models/M_Wall_01.mgcg" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/assets/models/sceneK.json" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/assets/textures/Fonts.png" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/shaders/Overlay.frag" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/shaders/Overlay.vert" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/shaders/Text.frag" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/shaders/Text.vert" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/assets/models/gelatoBus.mgcg" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/assets/models/scene.json" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/assets/textures/MainScene/BACK DOOR 5.jpg" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/assets/textures/MainScene/BRICK 8.jpg" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/assets/textures/MainScene/Brick8 NM.png" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/assets/textures/MainScene/FlatNM.png" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/assets/textures/MainScene/GARAGE DOOR 2.jpg" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/assets/textures/MainScene/GaraeDoor2NM.png" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/assets/textures/MainScene/METAL GREY.png" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/assets/textures/MainScene/Painted_metal_02_2K_Roughness.png" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/assets/textures/MainScene/PavementConcreteNM.png" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/assets/textures/MainScene/Pavement_Concrete_Marked_Footprints_UV_CM_1.jpg" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/assets/textures/MainScene/ROOFTOP.jpg" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/assets/textures/MainScene/RooftopNM.png" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/assets/textures/MainScene/Untitled-0.png" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/assets/textures/MainScene/Untitled-1.png" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/assets/textures/MainScene/Untitled-2.png" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/assets/textures/MainScene/Untitled.png" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/assets/textures/MainScene/WALL 6.jpg" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/assets/textures/MainScene/Wall6NM.png" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/assets/textures/MainScene/WallWhiteLinedNM.png" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/assets/textures/MainScene/wall white LINED.jpg" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/assets/models/M_Wall_01.mgcg" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/assets/models/TEST.obj" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/assets/models/sceneK.json" beforeDir="false" afterPath="$PROJECT_DIR$/assets/models/sceneK.json" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/assets/textures/Grey.jpg" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/assets/textures/TEST.png" beforeDir="false" />
       <change beforePath="$PROJECT_DIR$/src/main.cpp" beforeDir="false" afterPath="$PROJECT_DIR$/src/main.cpp" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
@@ -80,13 +56,14 @@
     &quot;assignee&quot;: &quot;kienndo&quot;
   }
 }</component>
-  <component name="GithubPullRequestsUISettings">{
-  &quot;selectedUrlAndAccountId&quot;: {
-    &quot;url&quot;: &quot;https://github.com/kienndo/CG-hospital.git&quot;,
-    &quot;accountId&quot;: &quot;e7054ae5-1cc6-406b-8903-c947dff39a28&quot;
+  <component name="GithubPullRequestsUISettings"><![CDATA[{
+  "selectedUrlAndAccountId": {
+    "url": "https://github.com/kienndo/CG-hospital.git",
+    "accountId": "f1b63bb5-5f42-4daf-b0d1-c7197bdf0c5d"
   }
-}</component>
+}]]></component>
   <component name="HighlightingSettingsPerFile">
+    <setting file="mock:///Users/kienninhdo/CLionProjects/CG_hospital/src/main.cpp" root0="SKIP_HIGHLIGHTING" />
     <setting file="mock:///Users/kienninhdo/CLionProjects/CG_hospital/src/main.cpp" root0="SKIP_HIGHLIGHTING" />
   </component>
   <component name="ProjectApplicationVersion">
@@ -135,17 +112,17 @@
     </key>
   </component>
   <component name="RunManager" selected="CMake Application.CG_hospital">
-    <configuration default="true" type="CLionExternalRunConfiguration" factoryName="Application" REDIRECT_INPUT="false" ELEVATE="false" USE_EXTERNAL_CONSOLE="false" EMULATE_TERMINAL="false" PASS_PARENT_ENVS_2="true">
-      <method v="2">
-        <option name="CLION.EXTERNAL.BUILD" enabled="true" />
-      </method>
-    </configuration>
     <configuration name="CG_hospital" type="CMakeRunConfiguration" factoryName="Application" REDIRECT_INPUT="false" ELEVATE="false" USE_EXTERNAL_CONSOLE="false" EMULATE_TERMINAL="false" PASS_PARENT_ENVS_2="true" PROJECT_NAME="CG_hospital" TARGET_NAME="CG_hospital" CONFIG_NAME="Debug" RUN_TARGET_PROJECT_NAME="CG_hospital" RUN_TARGET_NAME="CG_hospital">
       <method v="2">
         <option name="com.jetbrains.cidr.execution.CidrBuildBeforeRunTaskProvider$BuildBeforeRunTask" enabled="true" />
       </method>
     </configuration>
     <configuration name="CG_hospital_Shaders" type="CMakeRunConfiguration" factoryName="Application" REDIRECT_INPUT="false" ELEVATE="false" USE_EXTERNAL_CONSOLE="false" EMULATE_TERMINAL="false" PASS_PARENT_ENVS_2="true" PROJECT_NAME="CG_hospital" TARGET_NAME="CG_hospital_Shaders" CONFIG_NAME="Debug">
+      <method v="2">
+        <option name="com.jetbrains.cidr.execution.CidrBuildBeforeRunTaskProvider$BuildBeforeRunTask" enabled="true" />
+      </method>
+    </configuration>
+    <configuration default="true" type="CMakeRunConfiguration" factoryName="Application" REDIRECT_INPUT="false" ELEVATE="false" USE_EXTERNAL_CONSOLE="false" EMULATE_TERMINAL="false" PASS_PARENT_ENVS_2="true">
       <method v="2">
         <option name="com.jetbrains.cidr.execution.CidrBuildBeforeRunTaskProvider$BuildBeforeRunTask" enabled="true" />
       </method>
@@ -168,6 +145,7 @@
       <workItem from="1755591599800" duration="26434000" />
       <workItem from="1755707332338" duration="9875000" />
       <workItem from="1755774526039" duration="20934000" />
+      <workItem from="1755961050222" duration="478000" />
     </task>
     <task id="LOCAL−00001" summary="one aircondition through scene.json works">
       <option name="closed" value="true" />
