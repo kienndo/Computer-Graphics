@@ -185,6 +185,20 @@
           "translate": [-63.65, 0, 49.5],
           "scale": [0.1, 0.1, 0.1],
           "eulerAngles": [0, 270, 0]
+        },
+        { "id": "doorsmallwindow6",
+          "model": "M_Door1",
+          "texture": ["T_Door1", "Noise"],
+          "translate": [10.75, 0, 62.6],
+          "scale": [0.1, 0.1, 0.1],
+          "eulerAngles": [0, 90, 0]
+        },
+        { "id": "doorsmallwindow6",
+          "model": "M_Door1",
+          "texture": ["T_Door1", "Noise"],
+          "translate": [10.75, 0, 112.6],
+          "scale": [0.1, 0.1, 0.1],
+          "eulerAngles": [0, 90, 0]
         }
       ]
     }
