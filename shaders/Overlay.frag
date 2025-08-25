@@ -1,6 +1,1 @@
-#version 450#extension GL_ARB_separate_shader_objects : enable
-
-layout(location = 0) in vec2 fragUV;
-layout(location = 0) out vec4 outColor;layout(binding = 1) uniform sampler2D tex;
-void main() {
-	outColor = vec4(texture(tex, fragUV).rgb, 1.0f);	// output color}
+// Overlay.frag#version 450layout(location = 0) in vec2 vUV;layout(location = 0) out vec4 outColor;layout(set = 0, binding = 0) uniform UBOOverlay { float visible; };layout(set = 0, binding = 1) uniform sampler2D overlayTex;void main() {    vec4 tex = texture(overlayTex, vUV);    outColor = mix(vec4(0.0), tex, visible);}
