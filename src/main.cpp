@@ -11,6 +11,7 @@
 
 #include "modules/Starter.hpp"
 #include "modules/Scene.hpp"
+#include "modules/TextMaker.hpp"
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 
@@ -51,6 +52,13 @@ protected:
     bool tabPressed          = false;
     int prevTabState = GLFW_RELEASE;
 
+
+    // --- Mode switch state ---
+    bool editMode = false;                 // false = Camera mode, true = Edit mode
+    int  prevQState = GLFW_RELEASE;        // rising-edge detection for 'Q'
+    int  prevCommaState = GLFW_RELEASE;    // keep separate from Tab/Comma selection
+
+
     OverlayUniformBuffer overlayUBO{};  // default visible = 0.0f
 
     std::vector<int> selectableIndices;     // instance indices you can select
@@ -71,8 +79,14 @@ protected:
     std::vector<VertexDescriptorRef> VDRs;
     std::vector<TechniqueRef>PRs;
 
+    TextMaker txt;
+
     // --- Camera (simple fixed cam) ---
     glm::vec3 camPos{0.0f, 1.6f, 6.0f};
+    float     camYaw   = 0.0f;             // radians
+    float     camPitch = 0.0f;             // radians
+    glm::vec3 camFwd{0,0,-1}, camRight{1,0,0}, camUp{0,1,0};
+
 
     // --- Object transform state (controlled by keyboard) ---
     glm::vec3 objPos   {0.0f, 0.0f, 0.0f};
@@ -98,6 +112,8 @@ protected:
         if (h > 0) Ar = float(w) / float(h);
         RP.width  = w;
         RP.height = h;
+
+        txt.resizeScreen(w, h);
     }
 
     void localInit() {
@@ -187,18 +203,23 @@ protected:
         MOverlay.vertices = std::vector<unsigned char>(4 * sizeof(VertexOverlay));
         VertexOverlay *V1 = (VertexOverlay *)(&(MOverlay.vertices[0]));
 
-        V1[0] = {{-0.8f, 0.6f}, {0.0f,0.0f}};
-        V1[1] = {{-0.8f, 0.95f}, {0.0f,1.0f}};
-        V1[2] = {{ 0.8f, 0.6f}, {1.0f,0.0f}};
-        V1[3] = {{ 0.8f, 0.95f}, {1.0f,1.0f}};
+        V1[0] = {{-1.0f, -1.0f}, {0.0f, 0.0f}};   // bottom-left corner of screen
+        V1[1] = {{-1.0f,  1.0f}, {0.0f, 1.0f}};   // top-left
+        V1[2] = {{-0.8f, -1.0f}, {1.0f, 0.0f}};   // bottom-right (at x = -0.4, ~30% in)
+        V1[3] = {{-0.8f,  1.0f}, {1.0f, 1.0f}};   // top-right
+
         MOverlay.indices = {0, 1, 2,    1, 2, 3};
         MOverlay.initMesh(this, &VDoverlay);
 
         TOverlay.init(this, "assets/models/Untitled.png");
+        txt.init(this, windowWidth, windowHeight);
+
 
         std::cout << "\nLoading the scene\n\n";
         SC.init(this, 1, VDRs, PRs, "assets/models/scene.json");
         buildSelectableFromJSON("assets/models/scene.json");
+        //txt.print(1.0f, 1.0f, "HEI", 1, "CO", false, false, true, TAL_RIGHT, TRH_RIGHT, TRV_BOTTOM,{1.0f,0.0f,0.0f,1.0f},{0.8f,0.8f,0.0f,1.0f});
+        //showSelectableIds();
     }
 
     void pipelinesAndDescriptorSetsInit() {
@@ -211,12 +232,18 @@ protected:
 
 
         SC.pipelinesAndDescriptorSetsInit();
+        txt.pipelinesAndDescriptorSetsInit();
 
         // Register CB filler
         submitCommandBuffer("main", 0, populateCommandBufferAccess, this);
     }
 
     void pipelinesAndDescriptorSetsCleanup() {
+
+        txt.removeAllText();
+        txt.print(0.0f, 0.0f, " ", -1, "SS");
+        txt.updateCommandBuffer();
+
         PMesh.cleanup();
         RP.cleanup();
         DSGubo.cleanup();
@@ -224,6 +251,8 @@ protected:
         DSOverlay.cleanup();
 
         SC.pipelinesAndDescriptorSetsCleanup();
+        txt.pipelinesAndDescriptorSetsCleanup();
+
     }
 
     void localCleanup() {
@@ -237,7 +266,7 @@ protected:
         RP.destroy();
         POverlay.destroy();
 
-
+        txt.localCleanup();
         SC.localCleanup();
     }
 
@@ -249,69 +278,86 @@ protected:
         DSGubo.bind(cmdBuffer, PMesh, 0, currentImage);           // set=0 for scene
         SC.populateCommandBuffer(cmdBuffer, 0, currentImage);     // draws all mesh instances
 
-        // --- Overlay last ---
+
         POverlay.bind(cmdBuffer);
-        DSOverlay.bind(cmdBuffer, POverlay, 0, currentImage);     // set=0 for overlay
-        MOverlay.bind(cmdBuffer);                                  // binds vertex + index buffers
+        DSOverlay.bind(cmdBuffer, POverlay, 0, currentImage);
+        MOverlay.bind(cmdBuffer);
         vkCmdDrawIndexed(cmdBuffer,
-            static_cast<uint32_t>(MOverlay.indices.size()), 1, 0, 0, 0);
+        static_cast<uint32_t>(MOverlay.indices.size()), 1, 0, 0, 0);
 
         RP.end(cmdBuffer);
+    }
+
+    void handleModeToggle() {
+        int s = glfwGetKey(window, GLFW_KEY_Q);
+        if (s == GLFW_PRESS && prevQState == GLFW_RELEASE) {
+            editMode = !editMode;
+            std::cout << (editMode ? "[MODE] Edit\n" : "[MODE] Camera\n");
+        }
+        prevQState = s;
+    }
+
+    void updateFromInput(float dt, const glm::vec3& m, const glm::vec3& r, bool fire) {
+        const float ROT_SPEED       = glm::radians(120.0f);
+        const float MOVE_SPEED_BASE = 10.0f;
+        const float MOVE_SPEED_RUN  = 10.0f;
+        const float MOVE_SPEED      = fire ? MOVE_SPEED_RUN : MOVE_SPEED_BASE;
+
+        if (!editMode) {
+            // --- CAMERA MODE ---
+            camYaw   -= r.y * ROT_SPEED * dt;
+            camPitch -= r.x * ROT_SPEED * dt;
+            camPitch  = glm::clamp(camPitch, glm::radians(-89.0f), glm::radians(89.0f));
+
+            // R = Ry * Rx
+            glm::mat4 Ry = glm::rotate(glm::mat4(1), camYaw,   glm::vec3(0,1,0));
+            glm::mat4 Rx = glm::rotate(glm::mat4(1), camPitch, glm::vec3(1,0,0));
+            glm::mat4 R  = Ry * Rx;
+
+            camFwd   = glm::normalize(glm::vec3(R * glm::vec4(0,0,-1,0)));
+            camRight = glm::normalize(glm::vec3(R * glm::vec4(1,0, 0,0)));
+            camUp    = glm::normalize(glm::vec3(R * glm::vec4(0,1, 0,0)));
+
+            // E09 convention: forward is -m.z
+            camPos += camRight * (m.x * MOVE_SPEED * dt);
+            camPos += camUp    * (m.y * MOVE_SPEED * dt);
+            camPos -= camFwd   * (m.z * MOVE_SPEED * dt);
+        } else {
+            // --- EDIT MODE ---
+            manipulateSelected(dt, fire);
+        }
     }
 
 
     void updateUniformBuffer(uint32_t currentImage) {
 
-            if (glfwGetKey(window, GLFW_KEY_ESCAPE)) glfwSetWindowShouldClose(window, GL_TRUE);
-            handleObjectSelection();
+        if (glfwGetKey(window, GLFW_KEY_ESCAPE)) glfwSetWindowShouldClose(window, GL_TRUE);
 
-            // --- Inputs (same getSixAxis) ---
-            float dt = 0.0f; glm::vec3 m(0.0f), r(0.0f); bool fire = false;
-            getSixAxis(dt, m, r, fire);
+        // 1) Input (once)
+        float dt = 0.0f; glm::vec3 m(0.0f), r(0.0f); bool fire = false;
+        getSixAxis(dt, m, r, fire);
 
-            manipulateSelected(dt, fire);
+        // 2) Selection & mode toggle (edge-triggered)
+        handleObjectSelection();   // unchanged (see note below to fix its edge key)
+        handleModeToggle();
 
-            static float yaw   = 0.0f;                 // radians
-            static float pitch = 0.0f;
-            static glm::vec3 camPos = glm::vec3(0.0f, 1.6f, 6.0f);
+        // 3) Update either camera or selected object based on mode
+        updateFromInput(dt, m, r, fire);
 
+        // 4) Matrices
+        float Ar = float(windowWidth) / float(windowHeight);
+        glm::mat4 Prj = glm::perspective(glm::radians(60.0f), Ar, 0.01f, 200.0f);
+        Prj[1][1] *= -1.0f;
 
-            const float ROT_SPEED         = glm::radians(120.0f);  // rad/sec
-            const float MOVE_SPEED_BASE   = 10.0f;                  // m/s
-            const float MOVE_SPEED_RUN    = 10.0f;                  // m/s
-            const float MOVE_SPEED        = fire ? MOVE_SPEED_RUN : MOVE_SPEED_BASE;
+        glm::mat4 View = glm::lookAt(camPos, camPos + camFwd, glm::vec3(0,1,0));
 
-            yaw   -= r.y * ROT_SPEED * dt;
-            pitch -= r.x * ROT_SPEED * dt;
-            pitch  = glm::clamp(pitch, glm::radians(-89.0f), glm::radians(89.0f));
+        // 5) Global UBO
+        GlobalUBO g{};
+        g.lightDir   = glm::normalize(glm::vec3(1,2,3));
+        g.lightColor = glm::vec4(1,1,1,1);
+        g.eyePos     = camPos;
 
-            // R = Ry * Rx
-            glm::mat4 Ry = glm::rotate(glm::mat4(1), yaw,   glm::vec3(0,1,0));
-            glm::mat4 Rx = glm::rotate(glm::mat4(1), pitch, glm::vec3(1,0,0));
-            glm::mat4 R  = Ry * Rx;
-
-            glm::vec3 fwd = glm::normalize(glm::vec3(R * glm::vec4(0,0,-1,0))); // forward
-            glm::vec3 rgt = glm::normalize(glm::vec3(R * glm::vec4(1,0, 0,0)));
-            glm::vec3 up  = glm::normalize(glm::vec3(R * glm::vec4(0,1, 0,0)));
-
-            // Movement: match E09 sign convention (forward is -m.z along forward dir)
-            camPos += rgt * (m.x * MOVE_SPEED * dt);
-            camPos += up  * (m.y * MOVE_SPEED * dt);
-            camPos -= fwd * (m.z * MOVE_SPEED * dt);  // NOTE: minus here to mirror E09
-
-            // --- Matrices (unchanged) ---
-            float Ar = float(windowWidth) / float(windowHeight);
-            glm::mat4 Prj = glm::perspective(glm::radians(60.0f), Ar, 0.01f, 200.0f);
-            Prj[1][1] *= -1.0f;
-
-            glm::mat4 View = glm::lookAt(camPos, camPos + fwd, glm::vec3(0,1,0));
-
-            // --- Global UBO ---
-            GlobalUBO g{};
-            g.lightDir   = glm::normalize(glm::vec3(1,2,3));
-            g.lightColor = glm::vec4(1,1,1,1);
-            g.eyePos     = camPos;
-
+        // 6) Per-instance locals
         for (int i = 0; i < SC.TI[0].InstanceCount; ++i) {
             auto &inst = SC.TI[0].I[i];
 
@@ -319,20 +365,32 @@ protected:
             l.mMat   = inst.Wm;
             l.nMat   = glm::inverse(glm::transpose(l.mMat));
             l.mvpMat = Prj * View * l.mMat;
-
-
             l.highlight = glm::vec4((i == selectedObjectIndex) ? 1.0f : 0.0f, 0.0f, 0.0f, 0.0f);
 
-            // map as you already do:
             inst.DS[0][0]->map(currentImage, &g, 0);  // global
             inst.DS[0][1]->map(currentImage, &l, 0);  // local
         }
 
-        overlayUBO.visible = (glfwGetKey(window, GLFW_KEY_COMMA) == GLFW_PRESS) ? 1.0f : 0.0f;
-        DSOverlay.map(currentImage, &overlayUBO, 0);   // binding 0 = UBO
-
-
+        // 7) Overlay
+        overlayUBO.visible = 1.0f;
+        DSOverlay.map(currentImage, &overlayUBO, 0);
     }
+
+
+    /*void showSelectableIds() {
+        std::string allIds = "";
+        //txt.print(1.0f, 1.0f, "HEI", 1, "CO", false, false, true, TAL_RIGHT, TRH_RIGHT, TRV_BOTTOM,{1.0f,0.0f,0.0f,1.0f},{0.8f,0.8f,0.0f,1.0f});
+        //txt.print(1.0f, 1.0f, selectableIds[3], 1, "CO", false, false, true, TAL_RIGHT, TRH_RIGHT, TRV_BOTTOM,{1.0f,0.0f,0.0f,1.0f},{0.8f,0.8f,0.0f,1.0f});
+        //txt.updateCommandBuffer();
+        float y = 1.0f;
+        for (int i=0; i<selectableIds.size(); ++i) {
+
+           allIds += selectableIds[i] + "\n";
+        }
+        txt.print(1.0f, y, allIds, 1, "CO", false, false, true, TAL_RIGHT, TRH_RIGHT, TRV_BOTTOM,{1.0f,0.0f,0.0f,1.0f},{0.8f,0.8f,0.0f,1.0f});
+        txt.updateCommandBuffer();
+    }*/
+
 
     static void populateCommandBufferAccess(VkCommandBuffer commandBuffer, int currentImage, void *params) {
         auto *app = reinterpret_cast<CG_hospital*>(params);
@@ -371,12 +429,10 @@ protected:
                     selectableIds.push_back(id.empty() ? ("instance_" + std::to_string(i)) : id);
                 }
             }
+
         } catch (...) {
             int count = /* safe fallback if Scene is present */ 0;
-            for (int i=0; i<count; ++i) {
-                selectableIndices.push_back(i);
-                selectableIds.push_back("instance_" + std::to_string(i));
-            }
+
         }
     }
 
@@ -438,12 +494,15 @@ protected:
                     (selectedListPos >= 0 && selectedListPos < (int)selectableIds.size())
                     ? selectableIds[selectedListPos]
                     : std::string("instance_") + std::to_string(selectedObjectIndex);
+                txt.print(1.0f, 1.0f, label, 1, "CO", false, false, true, TAL_RIGHT, TRH_RIGHT, TRV_BOTTOM,{1.0f,0.0f,0.0f,1.0f},{0.8f,0.8f,0.0f,1.0f});
 
                 std::cout << "Selected object idx: " << selectedObjectIndex
                           << "  id: " << label << "\n";
             }
         }
         prevTabState = state;
+        txt.updateCommandBuffer();
+
     }
 };
 
