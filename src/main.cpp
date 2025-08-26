@@ -34,7 +34,6 @@ struct LocalUBO {
     alignas(16) glm::vec4 highlight;
 };
 
-
 struct OverlayUniformBuffer {
     alignas(4) float visible;
 };
@@ -87,7 +86,6 @@ protected:
     float     camPitch = 0.0f;             // radians
     glm::vec3 camFwd{0,0,-1}, camRight{1,0,0}, camUp{0,1,0};
 
-
     // --- Object transform state (controlled by keyboard) ---
     glm::vec3 objPos   {0.0f, 0.0f, 0.0f};
     float     objYaw   = 0.0f; // around Y
@@ -96,8 +94,8 @@ protected:
     float     objScale = 0.01f;
 
     // Speeds
-    float MOVE_SPEED = 10.0f;                 // meters/sec
-    float ROT_SPEED  = glm::radians(90.0f);  // rad/sec
+    float MOVE_SPEED = 10.0f;
+    float ROT_SPEED  = glm::radians(90.0f);
 
     void setWindowParameters() {
         windowWidth = 1280;
@@ -140,7 +138,6 @@ protected:
                  {1, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT, 0, 1}
               });
 
-
         // Vertex layout
         VDsimp.init(this,
         { {0, sizeof(VertexSimp), VK_VERTEX_INPUT_RATE_VERTEX} },
@@ -179,9 +176,7 @@ protected:
 
         PMesh.init(this, &VDsimp,
         "shaders/Mesh.vert.spv",
-  "shaders/Mesh.frag.spv",
-  { &DSLglobal, &DSLmesh }
-        );
+  "shaders/Mesh.frag.spv",{ &DSLglobal, &DSLmesh });
         PMesh.setCullMode(VK_CULL_MODE_NONE);
         PMesh.setPolygonMode(VK_POLYGON_MODE_FILL);
 
@@ -203,10 +198,10 @@ protected:
         MOverlay.vertices = std::vector<unsigned char>(4 * sizeof(VertexOverlay));
         VertexOverlay *V1 = (VertexOverlay *)(&(MOverlay.vertices[0]));
 
-        V1[0] = {{-1.0f, -1.0f}, {0.0f, 0.0f}};   // bottom-left corner of screen
-        V1[1] = {{-1.0f,  1.0f}, {0.0f, 1.0f}};   // top-left
-        V1[2] = {{-0.8f, -1.0f}, {1.0f, 0.0f}};   // bottom-right (at x = -0.4, ~30% in)
-        V1[3] = {{-0.8f,  1.0f}, {1.0f, 1.0f}};   // top-right
+        V1[0] = { {-1.0f,  -0.7}, {0.0f, 0.0f} }; // bottom-left
+        V1[1] = { {-1.0f,  -1.0f   }, {0.0f, 1.0f} }; // top-left
+        V1[2] = { {-0.6f, -0.7}, {1.0f, 0.0f} }; // bottom-right
+        V1[3] = { {-0.6f, -1.0f   }, {1.0f, 1.0f} }; // top-right
 
         MOverlay.indices = {0, 1, 2,    1, 2, 3};
         MOverlay.initMesh(this, &VDoverlay);
@@ -214,8 +209,13 @@ protected:
         TOverlay.init(this, "assets/models/Untitled.png");
         txt.init(this, windowWidth, windowHeight);
 
-        // Add a tiny dummy so TextMaker has >=1 quad
-        txt.print(0.0f, 0.0f, " ", -1, "BOOT");   // one space on a hidden layer/tag
+        // Add a tiny dummy
+        txt.print(-0.9f, -0.9f, ("CAM MODE"), 2, "SS");
+        txt.print(-0.9f, -0.7f, "Currently editing: \nNone",
+              4,
+              "SS",
+              false, true, true,
+              TAL_LEFT, TRH_LEFT, TRV_TOP);
         txt.updateCommandBuffer();
 
 
@@ -232,11 +232,9 @@ protected:
         DSGubo.init(this, &DSLglobal, {});
         DSOverlay.init(this, &DSLoverlay, {TOverlay.getViewAndSampler()});
 
-
         SC.pipelinesAndDescriptorSetsInit();
         txt.pipelinesAndDescriptorSetsInit();
 
-        // Register CB filler
         submitCommandBuffer("main", 0, populateCommandBufferAccess, this);
     }
 
@@ -294,6 +292,8 @@ protected:
         if (s == GLFW_PRESS && prevQState == GLFW_RELEASE) {
             editMode = !editMode;
             std::cout << (editMode ? "[MODE] Edit\n" : "[MODE] Camera\n");
+            txt.print(-0.9f, -0.9f, (editMode ? "EDIT MODE" : "CAM MODE"), 2, "SS");
+            txt.updateCommandBuffer();
         }
         prevQState = s;
     }
@@ -385,7 +385,6 @@ protected:
     }
 
     void buildSelectableFromJSON(const char* path) {
-        try {
             std::ifstream f(path);
             if (!f) return;
             nlohmann::json j; f >> j;
@@ -414,11 +413,6 @@ protected:
                     selectableIds.push_back(id.empty() ? ("instance_" + std::to_string(i)) : id);
                 }
             }
-
-        } catch (...) {
-            int count = 0;
-
-        }
     }
 
     void manipulateSelected(float dt, bool fire) {
@@ -440,18 +434,26 @@ protected:
         if (glfwGetKey(window, GLFW_KEY_PAGE_UP)   == GLFW_PRESS) inst.Wm = glm::translate(glm::mat4(1), glm::vec3( 0,  MOVE*dt, 0)) * inst.Wm;
         if (glfwGetKey(window, GLFW_KEY_PAGE_DOWN) == GLFW_PRESS) inst.Wm = glm::translate(glm::mat4(1), glm::vec3( 0, -MOVE*dt, 0)) * inst.Wm;
 
-        // --- ROTATE in LOCAL space (post-multiply) ---
+        // --- ROTATE about Y-axis ---
         if (glfwGetKey(window, GLFW_KEY_T) == GLFW_PRESS) inst.Wm = inst.Wm * glm::rotate(glm::mat4(1),  ROT*dt, glm::vec3(0,1,0));
         if (glfwGetKey(window, GLFW_KEY_G) == GLFW_PRESS) inst.Wm = inst.Wm * glm::rotate(glm::mat4(1), -ROT*dt, glm::vec3(0,1,0));
 
         // --- SCALE uniformly in LOCAL space (post-multiply) ---
-        if (glfwGetKey(window, GLFW_KEY_KP_ADD)  == GLFW_PRESS) {
-            float s = std::pow(1.0f / SCL, dt * 60.0f); // frame-rate independent-ish
-            inst.Wm = inst.Wm * glm::scale(glm::mat4(1), glm::vec3(s));
+        bool plusKey  = glfwGetKey(window, GLFW_KEY_KP_ADD)      == GLFW_PRESS
+                     || glfwGetKey(window, GLFW_KEY_EQUAL)       == GLFW_PRESS;   // main row "=" / "+" (with Shift)
+        bool minusKey = glfwGetKey(window, GLFW_KEY_KP_SUBTRACT) == GLFW_PRESS
+                     || glfwGetKey(window, GLFW_KEY_MINUS)       == GLFW_PRESS;   // main row "-"
+
+        float step = std::pow(SCL, dt * 5.0f);
+
+        if (plusKey) {
+            // grow, MAC: "+"
+            inst.Wm = inst.Wm * glm::scale(glm::mat4(1.0f), glm::vec3(1.0f / step));
         }
-        if (glfwGetKey(window, GLFW_KEY_KP_SUBTRACT) == GLFW_PRESS) {
-            float s = std::pow(SCL, dt * 60.0f);
-            inst.Wm = inst.Wm * glm::scale(glm::mat4(1), glm::vec3(s));
+        if (minusKey) {
+            // shrink (inverse step), MAC: "´"
+            inst.Wm = inst.Wm * glm::scale(glm::mat4(1.0f), glm::vec3(step));
+
         }
 
     }
@@ -472,16 +474,13 @@ protected:
                     (selectedListPos >= 0 && selectedListPos < (int)selectableIds.size())
                     ? "Currently editing: \n" + selectableIds[selectedListPos]
                     : std::string("instance_") + std::to_string(selectedObjectIndex);
-                // x=0, y=0 anchored to LEFT/TOP → top-left corner
-                txt.print(0.0f, 0.0f, label,
-                          4,
-                          "SS",
-                          false, true, true,
-                          TAL_LEFT, TRH_LEFT, TRV_TOP,
-                          {1.0f,1.0f,1.0f,1.0f},   // text color
-                          {1.0f,0.8f,1.0f,1.0f});  // bg/outline if used
-                txt.updateCommandBuffer();
+                txt.print(-0.9f, -0.7f, label,
+              4,
+              "SS",
+              false, true, true,
+              TAL_LEFT, TRH_LEFT, TRV_TOP);
 
+                txt.updateCommandBuffer();
 
                 std::cout << "Selected object idx: " << selectedObjectIndex
                           << "  id: " << label << "\n";
@@ -491,7 +490,6 @@ protected:
         txt.updateCommandBuffer();
 
     }
-
 };
 
 int main() {
