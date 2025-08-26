@@ -11,6 +11,7 @@
 
 #include "modules/Starter.hpp"
 #include "modules/Scene.hpp"
+#include "modules/TextMaker.hpp"
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 
@@ -30,17 +31,16 @@ struct LocalUBO {
     alignas(16) glm::mat4 mvpMat;
     alignas(16) glm::mat4 mMat;
     alignas(16) glm::mat4 nMat;
-    alignas(16) glm::vec4 highlight;  // x = 1.0 → highlighted, 0.0 otherwise
+    alignas(16) glm::vec4 highlight;
 };
-
 
 struct OverlayUniformBuffer {
     alignas(4) float visible;
 };
 
 struct VertexOverlay {
-    alignas(16) glm::vec3 pos;
-    alignas(16) glm::vec2 UV;
+    glm::vec2 pos;
+    glm::vec2 UV;
 };
 
 class CG_hospital : public BaseProject {
@@ -52,25 +52,39 @@ protected:
     int prevTabState = GLFW_RELEASE;
 
 
+    // --- Mode switch state ---
+    bool editMode = false;                 // false = Camera mode, true = Edit mode
+    int  prevQState = GLFW_RELEASE;        // rising-edge detection for 'Q'
+    int  prevCommaState = GLFW_RELEASE;    // keep separate from Tab/Comma selection
+
+
+    OverlayUniformBuffer overlayUBO{};  // default visible = 0.0f
+
     std::vector<int> selectableIndices;     // instance indices you can select
     std::vector<std::string> selectableIds; // their human-readable IDs from JSON (optional UI)
 
-
     RenderPass RP;
-    DescriptorSetLayout DSLglobal, DSLmesh;
+    DescriptorSetLayout DSLglobal, DSLmesh, DSLoverlay;
 
-    VertexDescriptor VDsimp;
-    Pipeline         PMesh;
+    VertexDescriptor VDsimp, VDoverlay;
+    Pipeline         PMesh, POverlay;
 
-    DescriptorSet    DSGubo;
+    DescriptorSet    DSGubo, DSOverlay;
+    Texture TOverlay;
+    Model MOverlay;
 
     // Several Models
     Scene SC;
     std::vector<VertexDescriptorRef> VDRs;
     std::vector<TechniqueRef>PRs;
 
+    TextMaker txt;
+
     // --- Camera (simple fixed cam) ---
     glm::vec3 camPos{0.0f, 1.6f, 6.0f};
+    float     camYaw   = 0.0f;             // radians
+    float     camPitch = 0.0f;             // radians
+    glm::vec3 camFwd{0,0,-1}, camRight{1,0,0}, camUp{0,1,0};
 
     // --- Object transform state (controlled by keyboard) ---
     glm::vec3 objPos   {0.0f, 0.0f, 0.0f};
@@ -80,8 +94,8 @@ protected:
     float     objScale = 0.01f;
 
     // Speeds
-    float MOVE_SPEED = 10.0f;                 // meters/sec
-    float ROT_SPEED  = glm::radians(90.0f);  // rad/sec
+    float MOVE_SPEED = 10.0f;
+    float ROT_SPEED  = glm::radians(90.0f);
 
     void setWindowParameters() {
         windowWidth = 1280;
@@ -96,6 +110,8 @@ protected:
         if (h > 0) Ar = float(w) / float(h);
         RP.width  = w;
         RP.height = h;
+
+        txt.resizeScreen(w, h);
     }
 
     void localInit() {
@@ -117,6 +133,10 @@ protected:
             1, 1 }
         });
 
+        DSLoverlay.init(this, {
+                 {0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, VK_SHADER_STAGE_ALL_GRAPHICS, sizeof(OverlayUniformBuffer), 1},
+                 {1, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT, 0, 1}
+              });
 
         // Vertex layout
         VDsimp.init(this,
@@ -128,8 +148,27 @@ protected:
         }
         );
 
+        VDoverlay.init(this, {
+                  {0, sizeof(VertexOverlay), VK_VERTEX_INPUT_RATE_VERTEX}
+                }, {
+                  {0, 0, VK_FORMAT_R32G32_SFLOAT, offsetof(VertexOverlay, pos),
+                         sizeof(glm::vec2), OTHER},
+                  {0, 1, VK_FORMAT_R32G32_SFLOAT, offsetof(VertexOverlay, UV),
+                         sizeof(glm::vec2), UV}
+                });
+
+        POverlay.init(this, &VDoverlay,
+              "shaders/Overlay.vert.spv",
+              "shaders/Overlay.frag.spv",
+              { &DSLoverlay });
+
+        POverlay.setCompareOp(VK_COMPARE_OP_ALWAYS);
+        POverlay.setCullMode(VK_CULL_MODE_NONE);
+        POverlay.setPolygonMode(VK_POLYGON_MODE_FILL);
+
+
         VDRs.resize(1);
-        VDRs[0].init("VDsimp", &VDsimp); // OR use the name “VMesh” if your JSON expects that label
+        VDRs[0].init("VDsimp", &VDsimp);
 
 
         RP.init(this);
@@ -137,9 +176,7 @@ protected:
 
         PMesh.init(this, &VDsimp,
         "shaders/Mesh.vert.spv",
-  "shaders/Mesh.frag.spv",
-  { &DSLglobal, &DSLmesh }
-        );
+  "shaders/Mesh.frag.spv",{ &DSLglobal, &DSLmesh });
         PMesh.setCullMode(VK_CULL_MODE_NONE);
         PMesh.setPolygonMode(VK_POLYGON_MODE_FILL);
 
@@ -154,9 +191,33 @@ protected:
         }, /*TotalNtextures*/2, &VDsimp);
 
         // Pool sizing
-        DPSZs.uniformBlocksInPool = 3;
-        DPSZs.texturesInPool      = 4;
+        DPSZs.uniformBlocksInPool = 4;
+        DPSZs.texturesInPool      = 29;
         DPSZs.setsInPool          = 3;
+
+        MOverlay.vertices = std::vector<unsigned char>(4 * sizeof(VertexOverlay));
+        VertexOverlay *V1 = (VertexOverlay *)(&(MOverlay.vertices[0]));
+
+        V1[0] = { {-1.0f,  -0.7}, {0.0f, 0.0f} }; // bottom-left
+        V1[1] = { {-1.0f,  -1.0f   }, {0.0f, 1.0f} }; // top-left
+        V1[2] = { {-0.6f, -0.7}, {1.0f, 0.0f} }; // bottom-right
+        V1[3] = { {-0.6f, -1.0f   }, {1.0f, 1.0f} }; // top-right
+
+        MOverlay.indices = {0, 1, 2,    1, 2, 3};
+        MOverlay.initMesh(this, &VDoverlay);
+
+        TOverlay.init(this, "assets/models/Untitled.png");
+        txt.init(this, windowWidth, windowHeight);
+
+        // Add a tiny dummy
+        txt.print(-0.9f, -0.9f, ("CAM MODE"), 2, "SS");
+        txt.print(-0.9f, -0.7f, "Currently editing: \nNone",
+              4,
+              "SS",
+              false, true, true,
+              TAL_LEFT, TRH_LEFT, TRV_TOP);
+        txt.updateCommandBuffer();
+
 
         std::cout << "\nLoading the scene\n\n";
         SC.init(this, 1, VDRs, PRs, "assets/models/scene.json");
@@ -166,99 +227,139 @@ protected:
     void pipelinesAndDescriptorSetsInit() {
         RP.create();
         PMesh.create(&RP);
+        POverlay.create(&RP);
 
         DSGubo.init(this, &DSLglobal, {});
+        DSOverlay.init(this, &DSLoverlay, {TOverlay.getViewAndSampler()});
 
         SC.pipelinesAndDescriptorSetsInit();
+        txt.pipelinesAndDescriptorSetsInit();
 
-        // Register CB filler
         submitCommandBuffer("main", 0, populateCommandBufferAccess, this);
     }
 
     void pipelinesAndDescriptorSetsCleanup() {
+
+        txt.removeAllText();
+        txt.print(0.0f, 0.0f, " ", -1, "SS");
+        txt.updateCommandBuffer();
+
         PMesh.cleanup();
         RP.cleanup();
         DSGubo.cleanup();
+        POverlay.cleanup();
+        DSOverlay.cleanup();
 
         SC.pipelinesAndDescriptorSetsCleanup();
+        txt.pipelinesAndDescriptorSetsCleanup();
     }
 
     void localCleanup() {
+        TOverlay.cleanup();
+        MOverlay.cleanup();
+        DSLoverlay.cleanup();
+
         DSLglobal.cleanup();
         DSLmesh.cleanup();
         PMesh.destroy();
         RP.destroy();
+        POverlay.destroy();
 
+        txt.localCleanup();
         SC.localCleanup();
     }
 
     void populateCommandBuffer(VkCommandBuffer cmdBuffer, int currentImage){
         RP.begin(cmdBuffer, currentImage);
 
-
+        // --- Scene first ---
         PMesh.bind(cmdBuffer);
+        DSGubo.bind(cmdBuffer, PMesh, 0, currentImage);           // set=0 for scene
+        SC.populateCommandBuffer(cmdBuffer, 0, currentImage);     // draws all mesh instances
 
-        // You own set=0 (global). Scene will NOT bind it for you.
-        DSGubo.bind(cmdBuffer, PMesh, 0, currentImage);
 
-        // Scene binds only its local set(s) and issues vkCmdDrawIndexed
-        SC.populateCommandBuffer(cmdBuffer, 0, currentImage);
+        POverlay.bind(cmdBuffer);
+        DSOverlay.bind(cmdBuffer, POverlay, 0, currentImage);
+        MOverlay.bind(cmdBuffer);
+        vkCmdDrawIndexed(cmdBuffer,
+        static_cast<uint32_t>(MOverlay.indices.size()), 1, 0, 0, 0);
 
         RP.end(cmdBuffer);
     }
 
-    void updateUniformBuffer(uint32_t currentImage) {
+    void handleModeToggle() {
+        int s = glfwGetKey(window, GLFW_KEY_Q);
+        if (s == GLFW_PRESS && prevQState == GLFW_RELEASE) {
+            editMode = !editMode;
+            std::cout << (editMode ? "[MODE] Edit\n" : "[MODE] Camera\n");
+            txt.print(-0.9f, -0.9f, (editMode ? "EDIT MODE" : "CAM MODE"), 2, "SS");
+            txt.updateCommandBuffer();
+        }
+        prevQState = s;
+    }
 
-            if (glfwGetKey(window, GLFW_KEY_ESCAPE)) glfwSetWindowShouldClose(window, GL_TRUE);
-            handleObjectSelection();
+    void updateFromInput(float dt, const glm::vec3& m, const glm::vec3& r, bool fire) {
+        const float ROT_SPEED       = glm::radians(120.0f);
+        const float MOVE_SPEED_BASE = 10.0f;
+        const float MOVE_SPEED_RUN  = 10.0f;
+        const float MOVE_SPEED      = fire ? MOVE_SPEED_RUN : MOVE_SPEED_BASE;
 
-            // --- Inputs (same getSixAxis) ---
-            float dt = 0.0f; glm::vec3 m(0.0f), r(0.0f); bool fire = false;
-            getSixAxis(dt, m, r, fire);
-
-            manipulateSelected(dt, fire);
-
-            static float yaw   = 0.0f;                 // radians
-            static float pitch = 0.0f;
-            static glm::vec3 camPos = glm::vec3(0.0f, 1.6f, 6.0f);
-
-
-            const float ROT_SPEED         = glm::radians(120.0f);  // rad/sec
-            const float MOVE_SPEED_BASE   = 10.0f;                  // m/s
-            const float MOVE_SPEED_RUN    = 10.0f;                  // m/s
-            const float MOVE_SPEED        = fire ? MOVE_SPEED_RUN : MOVE_SPEED_BASE;
-
-            yaw   -= r.y * ROT_SPEED * dt;
-            pitch -= r.x * ROT_SPEED * dt;
-            pitch  = glm::clamp(pitch, glm::radians(-89.0f), glm::radians(89.0f));
+        if (!editMode) {
+            // --- CAMERA MODE ---
+            camYaw   -= r.y * ROT_SPEED * dt;
+            camPitch -= r.x * ROT_SPEED * dt;
+            camPitch  = glm::clamp(camPitch, glm::radians(-89.0f), glm::radians(89.0f));
 
             // R = Ry * Rx
-            glm::mat4 Ry = glm::rotate(glm::mat4(1), yaw,   glm::vec3(0,1,0));
-            glm::mat4 Rx = glm::rotate(glm::mat4(1), pitch, glm::vec3(1,0,0));
+            glm::mat4 Ry = glm::rotate(glm::mat4(1), camYaw,   glm::vec3(0,1,0));
+            glm::mat4 Rx = glm::rotate(glm::mat4(1), camPitch, glm::vec3(1,0,0));
             glm::mat4 R  = Ry * Rx;
 
-            glm::vec3 fwd = glm::normalize(glm::vec3(R * glm::vec4(0,0,-1,0))); // forward
-            glm::vec3 rgt = glm::normalize(glm::vec3(R * glm::vec4(1,0, 0,0)));
-            glm::vec3 up  = glm::normalize(glm::vec3(R * glm::vec4(0,1, 0,0)));
+            camFwd   = glm::normalize(glm::vec3(R * glm::vec4(0,0,-1,0)));
+            camRight = glm::normalize(glm::vec3(R * glm::vec4(1,0, 0,0)));
+            camUp    = glm::normalize(glm::vec3(R * glm::vec4(0,1, 0,0)));
 
-            // Movement: match E09 sign convention (forward is -m.z along forward dir)
-            camPos += rgt * (m.x * MOVE_SPEED * dt);
-            camPos += up  * (m.y * MOVE_SPEED * dt);
-            camPos -= fwd * (m.z * MOVE_SPEED * dt);  // NOTE: minus here to mirror E09
+            camPos += camRight * (m.x * MOVE_SPEED * dt);
+            camPos += camUp    * (m.y * MOVE_SPEED * dt);
+            camPos -= camFwd   * (m.z * MOVE_SPEED * dt);
+        } else {
+            // --- EDIT MODE ---
+            manipulateSelected(dt, fire);
+        }
+    }
 
-            // --- Matrices (unchanged) ---
-            float Ar = float(windowWidth) / float(windowHeight);
-            glm::mat4 Prj = glm::perspective(glm::radians(60.0f), Ar, 0.01f, 200.0f);
-            Prj[1][1] *= -1.0f;
+    void updateUniformBuffer(uint32_t currentImage) {
 
-            glm::mat4 View = glm::lookAt(camPos, camPos + fwd, glm::vec3(0,1,0));
+        if (glfwGetKey(window, GLFW_KEY_ESCAPE)) glfwSetWindowShouldClose(window, GL_TRUE);
 
-            // --- Global UBO ---
-            GlobalUBO g{};
-            g.lightDir   = glm::normalize(glm::vec3(1,2,3));
-            g.lightColor = glm::vec4(1,1,1,1);
-            g.eyePos     = camPos;
+        // 1) Input (once)
+        float dt = 0.0f;
+        glm::vec3 m(0.0f), r(0.0f);
+        bool fire = false;
 
+        getSixAxis(dt, m, r, fire);
+
+        // 2) Selection & mode toggle (edge-triggered)
+        handleObjectSelection();
+        handleModeToggle();
+
+        // 3) Update either camera or selected object based on mode
+        updateFromInput(dt, m, r, fire);
+
+        // 4) Matrices
+        float Ar = float(windowWidth) / float(windowHeight);
+        glm::mat4 Prj = glm::perspective(glm::radians(60.0f), Ar, 0.01f, 200.0f);
+        Prj[1][1] *= -1.0f;
+
+        glm::mat4 View = glm::lookAt(camPos, camPos + camFwd, glm::vec3(0,1,0));
+
+        // 5) Global UBO
+        GlobalUBO g{};
+        g.lightDir   = glm::normalize(glm::vec3(1,2,3));
+        g.lightColor = glm::vec4(1,1,1,1);
+        g.eyePos     = camPos;
+
+        // 6) Per-instance locals
         for (int i = 0; i < SC.TI[0].InstanceCount; ++i) {
             auto &inst = SC.TI[0].I[i];
 
@@ -266,16 +367,17 @@ protected:
             l.mMat   = inst.Wm;
             l.nMat   = glm::inverse(glm::transpose(l.mMat));
             l.mvpMat = Prj * View * l.mMat;
-
-
             l.highlight = glm::vec4((i == selectedObjectIndex) ? 1.0f : 0.0f, 0.0f, 0.0f, 0.0f);
 
-            // map as you already do:
             inst.DS[0][0]->map(currentImage, &g, 0);  // global
             inst.DS[0][1]->map(currentImage, &l, 0);  // local
         }
 
+        // 7) Overlay
+        overlayUBO.visible = 1.0f;
+        DSOverlay.map(currentImage, &overlayUBO, 0);
     }
+
 
     static void populateCommandBufferAccess(VkCommandBuffer commandBuffer, int currentImage, void *params) {
         auto *app = reinterpret_cast<CG_hospital*>(params);
@@ -283,7 +385,6 @@ protected:
     }
 
     void buildSelectableFromJSON(const char* path) {
-        try {
             std::ifstream f(path);
             if (!f) return;
             nlohmann::json j; f >> j;
@@ -298,9 +399,7 @@ protected:
             auto isUnselectable = [](const std::string& id){
                 std::string s = id;
                 std::transform(s.begin(), s.end(), s.begin(), ::tolower);
-                return (s == "floor" || s == "wall" ||
-                        s.find("ceiling") != std::string::npos ||
-                        s.find("sky")     != std::string::npos);
+                return (s == "floor" || s == "wall" || s =="door" || s == "window");
             };
 
             selectableIndices.clear();
@@ -314,56 +413,50 @@ protected:
                     selectableIds.push_back(id.empty() ? ("instance_" + std::to_string(i)) : id);
                 }
             }
-        } catch (...) {
-            int count = /* safe fallback if Scene is present */ 0;
-            for (int i=0; i<count; ++i) {
-                selectableIndices.push_back(i);
-                selectableIds.push_back("instance_" + std::to_string(i));
-            }
-        }
     }
 
     void manipulateSelected(float dt, bool fire) {
-    if (selectedObjectIndex < 0) return;              // nothing selected
+        if (selectedObjectIndex < 0) return;              // nothing selected
 
-    // Tune these however you like (Shift = "fire" already from getSixAxis)
-    const float MOVE = (fire ? 50.0f : 15.0f);        // units/sec
-    const float ROT  = glm::radians(fire ? 180.0f : 90.0f); // rad/sec
-    const float SCL  = (fire ? 1.5f : 1.2f);          // scale step multiplier
+        // Tune these however you like (Shift = "fire" already from getSixAxis)
+        const float MOVE = (fire ? 50.0f : 15.0f);        // units/sec
+        const float ROT  = glm::radians(fire ? 180.0f : 90.0f); // rad/sec
+        const float SCL  = (fire ? 1.5f : 1.2f);          // scale step multiplier
 
-    auto &inst = SC.TI[0].I[selectedObjectIndex];
+        auto &inst = SC.TI[0].I[selectedObjectIndex];
 
-    // --- TRANSLATE in WORLD space (pre-multiply) ---
-    // Arrows: X/Z, PageUp/PageDown: Y
-    if (glfwGetKey(window, GLFW_KEY_LEFT)  == GLFW_PRESS) inst.Wm = glm::translate(glm::mat4(1), glm::vec3(-MOVE*dt, 0,        0)) * inst.Wm;
-    if (glfwGetKey(window, GLFW_KEY_RIGHT) == GLFW_PRESS) inst.Wm = glm::translate(glm::mat4(1), glm::vec3( MOVE*dt, 0,        0)) * inst.Wm;
-    if (glfwGetKey(window, GLFW_KEY_UP)    == GLFW_PRESS) inst.Wm = glm::translate(glm::mat4(1), glm::vec3( 0,        0, -MOVE*dt)) * inst.Wm;
-    if (glfwGetKey(window, GLFW_KEY_DOWN)  == GLFW_PRESS) inst.Wm = glm::translate(glm::mat4(1), glm::vec3( 0,        0,  MOVE*dt)) * inst.Wm;
-    if (glfwGetKey(window, GLFW_KEY_PAGE_UP)   == GLFW_PRESS) inst.Wm = glm::translate(glm::mat4(1), glm::vec3( 0,  MOVE*dt, 0)) * inst.Wm;
-    if (glfwGetKey(window, GLFW_KEY_PAGE_DOWN) == GLFW_PRESS) inst.Wm = glm::translate(glm::mat4(1), glm::vec3( 0, -MOVE*dt, 0)) * inst.Wm;
+        // --- TRANSLATE in WORLD space (pre-multiply) ---
+        // Arrows: X/Z, PageUp/PageDown: Y
+        if (glfwGetKey(window, GLFW_KEY_LEFT)  == GLFW_PRESS) inst.Wm = glm::translate(glm::mat4(1), glm::vec3(-MOVE*dt, 0,        0)) * inst.Wm;
+        if (glfwGetKey(window, GLFW_KEY_RIGHT) == GLFW_PRESS) inst.Wm = glm::translate(glm::mat4(1), glm::vec3( MOVE*dt, 0,        0)) * inst.Wm;
+        if (glfwGetKey(window, GLFW_KEY_UP)    == GLFW_PRESS) inst.Wm = glm::translate(glm::mat4(1), glm::vec3( 0,        0, -MOVE*dt)) * inst.Wm;
+        if (glfwGetKey(window, GLFW_KEY_DOWN)  == GLFW_PRESS) inst.Wm = glm::translate(glm::mat4(1), glm::vec3( 0,        0,  MOVE*dt)) * inst.Wm;
+        if (glfwGetKey(window, GLFW_KEY_PAGE_UP)   == GLFW_PRESS) inst.Wm = glm::translate(glm::mat4(1), glm::vec3( 0,  MOVE*dt, 0)) * inst.Wm;
+        if (glfwGetKey(window, GLFW_KEY_PAGE_DOWN) == GLFW_PRESS) inst.Wm = glm::translate(glm::mat4(1), glm::vec3( 0, -MOVE*dt, 0)) * inst.Wm;
 
-    // --- ROTATE in LOCAL space (post-multiply) ---
-    // R/F => ±X,  T/G => ±Y,  Y/H => ±Z
-    if (glfwGetKey(window, GLFW_KEY_R) == GLFW_PRESS) inst.Wm = inst.Wm * glm::rotate(glm::mat4(1),  ROT*dt, glm::vec3(1,0,0));
-    if (glfwGetKey(window, GLFW_KEY_F) == GLFW_PRESS) inst.Wm = inst.Wm * glm::rotate(glm::mat4(1), -ROT*dt, glm::vec3(1,0,0));
+        // --- ROTATE about Y-axis ---
+        if (glfwGetKey(window, GLFW_KEY_T) == GLFW_PRESS) inst.Wm = inst.Wm * glm::rotate(glm::mat4(1),  ROT*dt, glm::vec3(0,1,0));
+        if (glfwGetKey(window, GLFW_KEY_G) == GLFW_PRESS) inst.Wm = inst.Wm * glm::rotate(glm::mat4(1), -ROT*dt, glm::vec3(0,1,0));
 
-    if (glfwGetKey(window, GLFW_KEY_T) == GLFW_PRESS) inst.Wm = inst.Wm * glm::rotate(glm::mat4(1),  ROT*dt, glm::vec3(0,1,0));
-    if (glfwGetKey(window, GLFW_KEY_G) == GLFW_PRESS) inst.Wm = inst.Wm * glm::rotate(glm::mat4(1), -ROT*dt, glm::vec3(0,1,0));
+        // --- SCALE uniformly in LOCAL space (post-multiply) ---
+        bool plusKey  = glfwGetKey(window, GLFW_KEY_KP_ADD)      == GLFW_PRESS
+                     || glfwGetKey(window, GLFW_KEY_EQUAL)       == GLFW_PRESS;   // main row "=" / "+" (with Shift)
+        bool minusKey = glfwGetKey(window, GLFW_KEY_KP_SUBTRACT) == GLFW_PRESS
+                     || glfwGetKey(window, GLFW_KEY_MINUS)       == GLFW_PRESS;   // main row "-"
 
-    if (glfwGetKey(window, GLFW_KEY_Y) == GLFW_PRESS) inst.Wm = inst.Wm * glm::rotate(glm::mat4(1),  ROT*dt, glm::vec3(0,0,1));
-    if (glfwGetKey(window, GLFW_KEY_H) == GLFW_PRESS) inst.Wm = inst.Wm * glm::rotate(glm::mat4(1), -ROT*dt, glm::vec3(0,0,1));
+        float step = std::pow(SCL, dt * 5.0f);
 
-    // --- SCALE uniformly in LOCAL space (post-multiply) ---
-    // '[' = smaller, ']' = bigger
-    if (glfwGetKey(window, GLFW_KEY_KP_SUBTRACT)  == GLFW_PRESS) {
-        float s = std::pow(1.0f / SCL, dt * 60.0f); // frame-rate independent-ish
-        inst.Wm = inst.Wm * glm::scale(glm::mat4(1), glm::vec3(s));
+        if (plusKey) {
+            // grow, MAC: "+"
+            inst.Wm = inst.Wm * glm::scale(glm::mat4(1.0f), glm::vec3(1.0f / step));
+        }
+        if (minusKey) {
+            // shrink (inverse step), MAC: "´"
+            inst.Wm = inst.Wm * glm::scale(glm::mat4(1.0f), glm::vec3(step));
+
+        }
+
     }
-    if (glfwGetKey(window, GLFW_KEY_KP_ADD) == GLFW_PRESS) {
-        float s = std::pow(SCL, dt * 60.0f);
-        inst.Wm = inst.Wm * glm::scale(glm::mat4(1), glm::vec3(s));
-    }
-}
 
     void handleObjectSelection() {
         // Rising-edge detection: fires once when the key goes from RELEASE -> PRESS
@@ -379,16 +472,24 @@ protected:
 
                 const std::string& label =
                     (selectedListPos >= 0 && selectedListPos < (int)selectableIds.size())
-                    ? selectableIds[selectedListPos]
+                    ? "Currently editing: \n" + selectableIds[selectedListPos]
                     : std::string("instance_") + std::to_string(selectedObjectIndex);
+                txt.print(-0.9f, -0.7f, label,
+              4,
+              "SS",
+              false, true, true,
+              TAL_LEFT, TRH_LEFT, TRV_TOP);
+
+                txt.updateCommandBuffer();
 
                 std::cout << "Selected object idx: " << selectedObjectIndex
                           << "  id: " << label << "\n";
             }
         }
         prevTabState = state;
-    }
+        txt.updateCommandBuffer();
 
+    }
 };
 
 int main() {
