@@ -5,6 +5,7 @@
 #include <algorithm>
 #include <string>
 #include <vector>
+#include <unordered_set>
 
 #define GLM_FORCE_RADIANS
 #define GLM_FORCE_DEPTH_ZERO_TO_ONE
@@ -51,11 +52,13 @@ protected:
     bool tabPressed          = false;
     int prevTabState = GLFW_RELEASE;
 
+    // Delete
+    std::unordered_set<std::string> hiddenIds;
+    int prevDelState = GLFW_RELEASE;    // rising edge for K
 
     // --- Mode switch state ---
     bool editMode = false;                 // false = Camera mode, true = Edit mode
     int  prevQState = GLFW_RELEASE;        // rising-edge detection for 'Q'
-    int  prevCommaState = GLFW_RELEASE;    // keep separate from Tab/Comma selection
 
 
     OverlayUniformBuffer overlayUBO{};  // default visible = 0.0f
@@ -81,9 +84,9 @@ protected:
     TextMaker txt;
 
     // --- Camera (simple fixed cam) ---
-    glm::vec3 camPos{0.0f, 1.6f, 6.0f};
+    glm::vec3 camPos{0.0f, 40.0f, 6.0f};
     float     camYaw   = 0.0f;             // radians
-    float     camPitch = 0.0f;             // radians
+    float     camPitch = -0.5f;             // radians
     glm::vec3 camFwd{0,0,-1}, camRight{1,0,0}, camUp{0,1,0};
 
     // --- Object transform state (controlled by keyboard) ---
@@ -343,6 +346,26 @@ protected:
         handleObjectSelection();
         handleModeToggle();
 
+        // --- Hide current selection (K toggles) ---
+        int kState = glfwGetKey(window, GLFW_KEY_D);
+        if (kState == GLFW_PRESS && prevDelState == GLFW_RELEASE) {
+            if (selectedListPos >= 0 && selectedListPos < (int)selectableIds.size()) {
+                const std::string& id = selectableIds[selectedListPos];
+                if (hiddenIds.count(id)) {
+                    hiddenIds.erase(id);
+                } else {
+                    hiddenIds.insert(id);
+                }
+                // (optional) UI nudge
+                txt.print(-0.9f, -0.7f, hiddenIds.count(id) ? "Currently editing: \nNone"
+                                                            : ("Currently editing: \n" + id),
+                          4, "SS", false, true, true, TAL_LEFT, TRH_LEFT, TRV_TOP);
+                txt.updateCommandBuffer();
+            }
+        }
+        prevDelState = kState;
+
+
         // 3) Update either camera or selected object based on mode
         updateFromInput(dt, m, r, fire);
 
@@ -367,7 +390,16 @@ protected:
             l.mMat   = inst.Wm;
             l.nMat   = glm::inverse(glm::transpose(l.mMat));
             l.mvpMat = Prj * View * l.mMat;
-            l.highlight = glm::vec4((i == selectedObjectIndex) ? 1.0f : 0.0f, 0.0f, 0.0f, 0.0f);
+            const std::string& iid = *inst.id;                   // instance's string id
+            float visible = (hiddenIds.count(iid) ? 0.0f : 1.0f);
+
+            l.highlight = glm::vec4(
+                (i == selectedObjectIndex) ? 1.0f : 0.0f,        // x: highlighted selection
+                0.0f,
+                0.0f,
+                visible                                           // w: visibility flag (1=show, 0=hide)
+            );
+
 
             inst.DS[0][0]->map(currentImage, &g, 0);  // global
             inst.DS[0][1]->map(currentImage, &l, 0);  // local
@@ -460,7 +492,7 @@ protected:
 
     void handleObjectSelection() {
         // Rising-edge detection: fires once when the key goes from RELEASE -> PRESS
-        int state = glfwGetKey(window, GLFW_KEY_COMMA);
+        int state = glfwGetKey(window, GLFW_KEY_TAB);
         if (state == GLFW_PRESS && prevTabState == GLFW_RELEASE) {
             if (selectableIndices.empty()) {
                 selectedObjectIndex = -1;
@@ -493,6 +525,7 @@ protected:
 };
 
 int main() {
+
     CG_hospital app;
     try { app.run(); }
     catch (const std::exception& e) { std::cerr << e.what() << std::endl; return EXIT_FAILURE; }

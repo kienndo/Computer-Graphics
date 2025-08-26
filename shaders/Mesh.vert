@@ -5,8 +5,8 @@ layout(binding = 0, set = 1) uniform UniformBufferObject {
 	mat4 mvpMat;
 	mat4 mMat;
 	mat4 nMat;
+	vec4 highlight;
 } ubo;
-
 
 layout(location = 0) in vec3 inPosition;
 layout(location = 1) in vec3 inNorm;
@@ -17,6 +17,12 @@ layout(location = 1) out vec3 fragNorm;
 layout(location = 2) out vec2 fragUV;
 
 void main() {
+
+    if (ubo.highlight.w < 0.5) {
+            gl_Position = vec4(2.0, 2.0, 2.0, 1.0);
+            return;
+        }
+
 	gl_Position = ubo.mvpMat * vec4(inPosition, 1.0);
 	fragPos = (ubo.mMat * vec4(inPosition, 1.0)).xyz;
 	fragNorm = (ubo.nMat * vec4(inNorm, 0.0)).xyz;
