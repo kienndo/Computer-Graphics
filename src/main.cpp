@@ -60,8 +60,12 @@ protected:
     bool editMode = false;                 // false = Camera mode, true = Edit mode
     int  prevQState = GLFW_RELEASE;        // rising-edge detection for 'Q'
 
+    // --- Keyboard info ---
+    bool showKeyOverlay = true;
+    int  prevPlusState  = GLFW_RELEASE;
 
-    OverlayUniformBuffer overlayUBO{};  // default visible = 0.0f
+
+    OverlayUniformBuffer CornerUBO{}, KeyUBO{};  // default visible = 0.0f
 
     std::vector<int> selectableIndices;     // instance indices you can select
     std::vector<std::string> selectableIds; // their human-readable IDs from JSON (optional UI)
@@ -72,9 +76,9 @@ protected:
     VertexDescriptor VDsimp, VDoverlay;
     Pipeline         PMesh, POverlay;
 
-    DescriptorSet    DSGubo, DSOverlay;
-    Texture TOverlay;
-    Model MOverlay;
+    DescriptorSet    DSGubo, DSCorner, DSKey;
+    Texture TCorner, TKey;
+    Model MCorner, MKey;
 
     // Several Models
     Scene SC;
@@ -85,8 +89,8 @@ protected:
 
     // --- Camera (simple fixed cam) ---
     glm::vec3 camPos{0.0f, 40.0f, 6.0f};
-    float     camYaw   = 0.0f;             // radians
-    float     camPitch = -0.5f;             // radians
+    float     camYaw   = 0.0f;
+    float     camPitch = -0.5f;
     glm::vec3 camFwd{0,0,-1}, camRight{1,0,0}, camUp{0,1,0};
 
     // --- Object transform state (controlled by keyboard) ---
@@ -97,7 +101,7 @@ protected:
     float     objScale = 0.01f;
 
     // Speeds
-    float MOVE_SPEED = 10.0f;
+    float MOVE_SPEED = 20.0f;
     float ROT_SPEED  = glm::radians(90.0f);
 
     void setWindowParameters() {
@@ -165,21 +169,19 @@ protected:
               "shaders/Overlay.frag.spv",
               { &DSLoverlay });
 
-        POverlay.setCompareOp(VK_COMPARE_OP_ALWAYS);
+        POverlay.setCompareOp(VK_COMPARE_OP_LESS_OR_EQUAL);
         POverlay.setCullMode(VK_CULL_MODE_NONE);
         POverlay.setPolygonMode(VK_POLYGON_MODE_FILL);
 
-
         VDRs.resize(1);
         VDRs[0].init("VDsimp", &VDsimp);
-
 
         RP.init(this);
         RP.properties[0].clearValue = {0.05f, 0.05f, 0.08f, 1.0f};
 
         PMesh.init(this, &VDsimp,
         "shaders/Mesh.vert.spv",
-  "shaders/Mesh.frag.spv",{ &DSLglobal, &DSLmesh });
+        "shaders/Mesh.frag.spv",{ &DSLglobal, &DSLmesh });
         PMesh.setCullMode(VK_CULL_MODE_NONE);
         PMesh.setPolygonMode(VK_POLYGON_MODE_FILL);
 
@@ -198,18 +200,32 @@ protected:
         DPSZs.texturesInPool      = 29;
         DPSZs.setsInPool          = 3;
 
-        MOverlay.vertices = std::vector<unsigned char>(4 * sizeof(VertexOverlay));
-        VertexOverlay *V1 = (VertexOverlay *)(&(MOverlay.vertices[0]));
+        MCorner.vertices = std::vector<unsigned char>(4 * sizeof(VertexOverlay));
+        VertexOverlay *V1 = (VertexOverlay *)(&(MCorner.vertices[0]));
 
         V1[0] = { {-1.0f,  -0.7}, {0.0f, 0.0f} }; // bottom-left
         V1[1] = { {-1.0f,  -1.0f   }, {0.0f, 1.0f} }; // top-left
         V1[2] = { {-0.6f, -0.7}, {1.0f, 0.0f} }; // bottom-right
         V1[3] = { {-0.6f, -1.0f   }, {1.0f, 1.0f} }; // top-right
 
-        MOverlay.indices = {0, 1, 2,    1, 2, 3};
-        MOverlay.initMesh(this, &VDoverlay);
+        MCorner.indices = {0, 1, 2,    1, 2, 3};
+        MCorner.initMesh(this, &VDoverlay);
 
-        TOverlay.init(this, "assets/models/Untitled.png");
+        TCorner.init(this, "assets/models/Untitled.png");
+
+        MKey.vertices = std::vector<unsigned char>(4 * sizeof(VertexOverlay));
+        VertexOverlay *V2 = (VertexOverlay *)(&(MKey.vertices[0]));
+
+        V2[0] = { {-0.6f, -0.6f}, {0.0f, 0.0f} }; // bottom-left
+        V2[1] = { {-0.6f,  0.6f}, {0.0f, 1.0f} }; // top-left
+        V2[2] = { { 0.6f, -0.6f}, {1.0f, 0.0f} }; // bottom-right
+        V2[3] = { { 0.6f,  0.6f}, {1.0f, 1.0f} }; // top-right
+
+        MKey.indices = {0, 1, 2,    1, 2, 3};
+        MKey.initMesh(this, &VDoverlay);
+
+        TKey.init(this, "assets/models/Keyboard.png");
+
         txt.init(this, windowWidth, windowHeight);
 
         // Add a tiny dummy
@@ -219,6 +235,7 @@ protected:
               "SS",
               false, true, true,
               TAL_LEFT, TRH_LEFT, TRV_TOP);
+        txt.print(-0.98f, -0.37f, ("Press P to hide keyboard actions" ), 1, "SS", false, true, true, TAL_LEFT, TRH_LEFT, TRV_TOP);
         txt.updateCommandBuffer();
 
 
@@ -233,7 +250,8 @@ protected:
         POverlay.create(&RP);
 
         DSGubo.init(this, &DSLglobal, {});
-        DSOverlay.init(this, &DSLoverlay, {TOverlay.getViewAndSampler()});
+        DSCorner.init(this, &DSLoverlay, {TCorner.getViewAndSampler()});
+        DSKey.init(this, &DSLoverlay, {TKey.getViewAndSampler()});
 
         SC.pipelinesAndDescriptorSetsInit();
         txt.pipelinesAndDescriptorSetsInit();
@@ -243,23 +261,22 @@ protected:
 
     void pipelinesAndDescriptorSetsCleanup() {
 
-        txt.removeAllText();
-        txt.print(0.0f, 0.0f, " ", -1, "SS");
-        txt.updateCommandBuffer();
-
         PMesh.cleanup();
         RP.cleanup();
         DSGubo.cleanup();
         POverlay.cleanup();
-        DSOverlay.cleanup();
+        DSCorner.cleanup();
+        DSKey.cleanup();
 
         SC.pipelinesAndDescriptorSetsCleanup();
         txt.pipelinesAndDescriptorSetsCleanup();
     }
 
     void localCleanup() {
-        TOverlay.cleanup();
-        MOverlay.cleanup();
+        TCorner.cleanup();
+        MCorner.cleanup();
+        TKey.cleanup();
+        MKey.cleanup();
         DSLoverlay.cleanup();
 
         DSLglobal.cleanup();
@@ -280,12 +297,15 @@ protected:
         DSGubo.bind(cmdBuffer, PMesh, 0, currentImage);           // set=0 for scene
         SC.populateCommandBuffer(cmdBuffer, 0, currentImage);     // draws all mesh instances
 
-
         POverlay.bind(cmdBuffer);
-        DSOverlay.bind(cmdBuffer, POverlay, 0, currentImage);
-        MOverlay.bind(cmdBuffer);
+        DSCorner.bind(cmdBuffer, POverlay, 0, currentImage);
+        MCorner.bind(cmdBuffer);
         vkCmdDrawIndexed(cmdBuffer,
-        static_cast<uint32_t>(MOverlay.indices.size()), 1, 0, 0, 0);
+        static_cast<uint32_t>(MCorner.indices.size()), 1, 0, 0, 0);
+
+        DSKey.bind(cmdBuffer, POverlay, 0, currentImage);
+        MKey.bind(cmdBuffer);
+        vkCmdDrawIndexed(cmdBuffer,static_cast<uint32_t>(MKey.indices.size()), 1, 0, 0, 0);
 
         RP.end(cmdBuffer);
     }
@@ -344,27 +364,9 @@ protected:
 
         // 2) Selection & mode toggle (edge-triggered)
         handleObjectSelection();
+        handleKeyboardOverlay();
         handleModeToggle();
-
-        // --- Hide current selection (K toggles) ---
-        int kState = glfwGetKey(window, GLFW_KEY_D);
-        if (kState == GLFW_PRESS && prevDelState == GLFW_RELEASE) {
-            if (selectedListPos >= 0 && selectedListPos < (int)selectableIds.size()) {
-                const std::string& id = selectableIds[selectedListPos];
-                if (hiddenIds.count(id)) {
-                    hiddenIds.erase(id);
-                } else {
-                    hiddenIds.insert(id);
-                }
-                // (optional) UI nudge
-                txt.print(-0.9f, -0.7f, hiddenIds.count(id) ? "Currently editing: \nNone"
-                                                            : ("Currently editing: \n" + id),
-                          4, "SS", false, true, true, TAL_LEFT, TRH_LEFT, TRV_TOP);
-                txt.updateCommandBuffer();
-            }
-        }
-        prevDelState = kState;
-
+        handleDelete();
 
         // 3) Update either camera or selected object based on mode
         updateFromInput(dt, m, r, fire);
@@ -406,10 +408,44 @@ protected:
         }
 
         // 7) Overlay
-        overlayUBO.visible = 1.0f;
-        DSOverlay.map(currentImage, &overlayUBO, 0);
+        CornerUBO.visible = 1.0f;
+        DSCorner.map(currentImage, &CornerUBO, 0);
+
+        KeyUBO.visible = showKeyOverlay ? 1.0f : 0.0f;
+        DSKey.map(currentImage, &KeyUBO, 0);
     }
 
+    void handleKeyboardOverlay() {
+
+        int state = glfwGetKey(window, GLFW_KEY_P);
+        if (state == GLFW_PRESS && prevPlusState == GLFW_RELEASE) {
+            showKeyOverlay = !showKeyOverlay;
+            txt.print(-0.98f, -0.37f, (showKeyOverlay ? "Press P to hide keyboard actions" : "Press P to show keyboard actions"), 1, "SS", false, true, true, TAL_LEFT, TRH_LEFT, TRV_TOP);
+            txt.updateCommandBuffer();
+        }
+        prevPlusState = state;
+    }
+
+    void handleDelete() {
+        // --- Hide current selection (K toggles) ---
+        int kState = glfwGetKey(window, GLFW_KEY_D);
+        if (kState == GLFW_PRESS && prevDelState == GLFW_RELEASE) {
+            if (selectedListPos >= 0 && selectedListPos < (int)selectableIds.size()) {
+                const std::string& id = selectableIds[selectedListPos];
+                if (hiddenIds.count(id)) {
+                    hiddenIds.erase(id);
+                } else {
+                    hiddenIds.insert(id);
+                }
+                // (optional) UI nudge
+                txt.print(-0.9f, -0.7f, hiddenIds.count(id) ? "Currently editing: \nNone"
+                                                            : ("Currently editing: \n" + id),
+                          4, "SS", false, true, true, TAL_LEFT, TRH_LEFT, TRV_TOP);
+                txt.updateCommandBuffer();
+            }
+        }
+        prevDelState = kState;
+    }
 
     static void populateCommandBufferAccess(VkCommandBuffer commandBuffer, int currentImage, void *params) {
         auto *app = reinterpret_cast<CG_hospital*>(params);
@@ -450,7 +486,6 @@ protected:
     void manipulateSelected(float dt, bool fire) {
         if (selectedObjectIndex < 0) return;              // nothing selected
 
-        // Tune these however you like (Shift = "fire" already from getSixAxis)
         const float MOVE = (fire ? 50.0f : 15.0f);        // units/sec
         const float ROT  = glm::radians(fire ? 180.0f : 90.0f); // rad/sec
         const float SCL  = (fire ? 1.5f : 1.2f);          // scale step multiplier
@@ -471,23 +506,18 @@ protected:
         if (glfwGetKey(window, GLFW_KEY_G) == GLFW_PRESS) inst.Wm = inst.Wm * glm::rotate(glm::mat4(1), -ROT*dt, glm::vec3(0,1,0));
 
         // --- SCALE uniformly in LOCAL space (post-multiply) ---
-        bool plusKey  = glfwGetKey(window, GLFW_KEY_KP_ADD)      == GLFW_PRESS
-                     || glfwGetKey(window, GLFW_KEY_EQUAL)       == GLFW_PRESS;   // main row "=" / "+" (with Shift)
-        bool minusKey = glfwGetKey(window, GLFW_KEY_KP_SUBTRACT) == GLFW_PRESS
-                     || glfwGetKey(window, GLFW_KEY_MINUS)       == GLFW_PRESS;   // main row "-"
 
         float step = std::pow(SCL, dt * 5.0f);
 
-        if (plusKey) {
-            // grow, MAC: "+"
+        if (glfwGetKey(window, GLFW_KEY_S) == GLFW_PRESS) {
+            // shrink
             inst.Wm = inst.Wm * glm::scale(glm::mat4(1.0f), glm::vec3(1.0f / step));
         }
-        if (minusKey) {
-            // shrink (inverse step), MAC: "´"
+        if (glfwGetKey(window, GLFW_KEY_W) == GLFW_PRESS) {
+            // grow
             inst.Wm = inst.Wm * glm::scale(glm::mat4(1.0f), glm::vec3(step));
 
         }
-
     }
 
     void handleObjectSelection() {
