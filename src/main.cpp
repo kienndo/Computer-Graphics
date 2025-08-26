@@ -31,7 +31,7 @@ struct LocalUBO {
     alignas(16) glm::mat4 mvpMat;
     alignas(16) glm::mat4 mMat;
     alignas(16) glm::mat4 nMat;
-    alignas(16) glm::vec4 highlight;  // x = 1.0 → highlighted, 0.0 otherwise
+    alignas(16) glm::vec4 highlight;
 };
 
 
@@ -197,8 +197,8 @@ protected:
 
         // Pool sizing
         DPSZs.uniformBlocksInPool = 4;
-        DPSZs.texturesInPool      = 5;
-        DPSZs.setsInPool          = 4;
+        DPSZs.texturesInPool      = 29;
+        DPSZs.setsInPool          = 3;
 
         MOverlay.vertices = std::vector<unsigned char>(4 * sizeof(VertexOverlay));
         VertexOverlay *V1 = (VertexOverlay *)(&(MOverlay.vertices[0]));
@@ -214,12 +214,14 @@ protected:
         TOverlay.init(this, "assets/models/Untitled.png");
         txt.init(this, windowWidth, windowHeight);
 
+        // Add a tiny dummy so TextMaker has >=1 quad
+        txt.print(0.0f, 0.0f, " ", -1, "BOOT");   // one space on a hidden layer/tag
+        txt.updateCommandBuffer();
+
 
         std::cout << "\nLoading the scene\n\n";
         SC.init(this, 1, VDRs, PRs, "assets/models/scene.json");
         buildSelectableFromJSON("assets/models/scene.json");
-        //txt.print(1.0f, 1.0f, "HEI", 1, "CO", false, false, true, TAL_RIGHT, TRH_RIGHT, TRV_BOTTOM,{1.0f,0.0f,0.0f,1.0f},{0.8f,0.8f,0.0f,1.0f});
-        //showSelectableIds();
     }
 
     void pipelinesAndDescriptorSetsInit() {
@@ -252,7 +254,6 @@ protected:
 
         SC.pipelinesAndDescriptorSetsCleanup();
         txt.pipelinesAndDescriptorSetsCleanup();
-
     }
 
     void localCleanup() {
@@ -318,7 +319,6 @@ protected:
             camRight = glm::normalize(glm::vec3(R * glm::vec4(1,0, 0,0)));
             camUp    = glm::normalize(glm::vec3(R * glm::vec4(0,1, 0,0)));
 
-            // E09 convention: forward is -m.z
             camPos += camRight * (m.x * MOVE_SPEED * dt);
             camPos += camUp    * (m.y * MOVE_SPEED * dt);
             camPos -= camFwd   * (m.z * MOVE_SPEED * dt);
@@ -328,17 +328,19 @@ protected:
         }
     }
 
-
     void updateUniformBuffer(uint32_t currentImage) {
 
         if (glfwGetKey(window, GLFW_KEY_ESCAPE)) glfwSetWindowShouldClose(window, GL_TRUE);
 
         // 1) Input (once)
-        float dt = 0.0f; glm::vec3 m(0.0f), r(0.0f); bool fire = false;
+        float dt = 0.0f;
+        glm::vec3 m(0.0f), r(0.0f);
+        bool fire = false;
+
         getSixAxis(dt, m, r, fire);
 
         // 2) Selection & mode toggle (edge-triggered)
-        handleObjectSelection();   // unchanged (see note below to fix its edge key)
+        handleObjectSelection();
         handleModeToggle();
 
         // 3) Update either camera or selected object based on mode
@@ -377,21 +379,6 @@ protected:
     }
 
 
-    /*void showSelectableIds() {
-        std::string allIds = "";
-        //txt.print(1.0f, 1.0f, "HEI", 1, "CO", false, false, true, TAL_RIGHT, TRH_RIGHT, TRV_BOTTOM,{1.0f,0.0f,0.0f,1.0f},{0.8f,0.8f,0.0f,1.0f});
-        //txt.print(1.0f, 1.0f, selectableIds[3], 1, "CO", false, false, true, TAL_RIGHT, TRH_RIGHT, TRV_BOTTOM,{1.0f,0.0f,0.0f,1.0f},{0.8f,0.8f,0.0f,1.0f});
-        //txt.updateCommandBuffer();
-        float y = 1.0f;
-        for (int i=0; i<selectableIds.size(); ++i) {
-
-           allIds += selectableIds[i] + "\n";
-        }
-        txt.print(1.0f, y, allIds, 1, "CO", false, false, true, TAL_RIGHT, TRH_RIGHT, TRV_BOTTOM,{1.0f,0.0f,0.0f,1.0f},{0.8f,0.8f,0.0f,1.0f});
-        txt.updateCommandBuffer();
-    }*/
-
-
     static void populateCommandBufferAccess(VkCommandBuffer commandBuffer, int currentImage, void *params) {
         auto *app = reinterpret_cast<CG_hospital*>(params);
         app->populateCommandBuffer(commandBuffer, currentImage);
@@ -413,9 +400,7 @@ protected:
             auto isUnselectable = [](const std::string& id){
                 std::string s = id;
                 std::transform(s.begin(), s.end(), s.begin(), ::tolower);
-                return (s == "floor" || s == "wall" ||
-                        s.find("ceiling") != std::string::npos ||
-                        s.find("sky")     != std::string::npos);
+                return (s == "floor" || s == "wall" || s =="door" || s == "window");
             };
 
             selectableIndices.clear();
@@ -431,7 +416,7 @@ protected:
             }
 
         } catch (...) {
-            int count = /* safe fallback if Scene is present */ 0;
+            int count = 0;
 
         }
     }
@@ -456,26 +441,19 @@ protected:
         if (glfwGetKey(window, GLFW_KEY_PAGE_DOWN) == GLFW_PRESS) inst.Wm = glm::translate(glm::mat4(1), glm::vec3( 0, -MOVE*dt, 0)) * inst.Wm;
 
         // --- ROTATE in LOCAL space (post-multiply) ---
-        // R/F => ±X,  T/G => ±Y,  Y/H => ±Z
-        if (glfwGetKey(window, GLFW_KEY_R) == GLFW_PRESS) inst.Wm = inst.Wm * glm::rotate(glm::mat4(1),  ROT*dt, glm::vec3(1,0,0));
-        if (glfwGetKey(window, GLFW_KEY_F) == GLFW_PRESS) inst.Wm = inst.Wm * glm::rotate(glm::mat4(1), -ROT*dt, glm::vec3(1,0,0));
-
         if (glfwGetKey(window, GLFW_KEY_T) == GLFW_PRESS) inst.Wm = inst.Wm * glm::rotate(glm::mat4(1),  ROT*dt, glm::vec3(0,1,0));
         if (glfwGetKey(window, GLFW_KEY_G) == GLFW_PRESS) inst.Wm = inst.Wm * glm::rotate(glm::mat4(1), -ROT*dt, glm::vec3(0,1,0));
 
-        if (glfwGetKey(window, GLFW_KEY_Y) == GLFW_PRESS) inst.Wm = inst.Wm * glm::rotate(glm::mat4(1),  ROT*dt, glm::vec3(0,0,1));
-        if (glfwGetKey(window, GLFW_KEY_H) == GLFW_PRESS) inst.Wm = inst.Wm * glm::rotate(glm::mat4(1), -ROT*dt, glm::vec3(0,0,1));
-
         // --- SCALE uniformly in LOCAL space (post-multiply) ---
-
-        if (glfwGetKey(window, GLFW_KEY_MINUS)  == GLFW_PRESS) {
+        if (glfwGetKey(window, GLFW_KEY_KP_ADD)  == GLFW_PRESS) {
             float s = std::pow(1.0f / SCL, dt * 60.0f); // frame-rate independent-ish
             inst.Wm = inst.Wm * glm::scale(glm::mat4(1), glm::vec3(s));
         }
-        if (glfwGetKey(window, GLFW_KEY_KP_ADD) == GLFW_PRESS) {
+        if (glfwGetKey(window, GLFW_KEY_KP_SUBTRACT) == GLFW_PRESS) {
             float s = std::pow(SCL, dt * 60.0f);
             inst.Wm = inst.Wm * glm::scale(glm::mat4(1), glm::vec3(s));
         }
+
     }
 
     void handleObjectSelection() {
@@ -492,9 +470,18 @@ protected:
 
                 const std::string& label =
                     (selectedListPos >= 0 && selectedListPos < (int)selectableIds.size())
-                    ? selectableIds[selectedListPos]
+                    ? "Currently editing: \n" + selectableIds[selectedListPos]
                     : std::string("instance_") + std::to_string(selectedObjectIndex);
-                txt.print(1.0f, 1.0f, label, 1, "CO", false, false, true, TAL_RIGHT, TRH_RIGHT, TRV_BOTTOM,{1.0f,0.0f,0.0f,1.0f},{0.8f,0.8f,0.0f,1.0f});
+                // x=0, y=0 anchored to LEFT/TOP → top-left corner
+                txt.print(0.0f, 0.0f, label,
+                          4,
+                          "SS",
+                          false, true, true,
+                          TAL_LEFT, TRH_LEFT, TRV_TOP,
+                          {1.0f,1.0f,1.0f,1.0f},   // text color
+                          {1.0f,0.8f,1.0f,1.0f});  // bg/outline if used
+                txt.updateCommandBuffer();
+
 
                 std::cout << "Selected object idx: " << selectedObjectIndex
                           << "  id: " << label << "\n";
@@ -504,6 +491,7 @@ protected:
         txt.updateCommandBuffer();
 
     }
+
 };
 
 int main() {
