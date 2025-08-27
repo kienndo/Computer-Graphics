@@ -11,9 +11,12 @@ layout(binding = 1, set = 1) uniform sampler2D tex;
 layout(binding = 2, set = 1) uniform sampler2D detail;
 
 layout(binding = 0, set = 0) uniform GlobalUniformBufferObject {
-	vec3 lightDir;
-	vec4 lightColor;
-	vec3 eyePos;
+	vec3 lightDir;		// direction of the direct light
+	vec4 lightColor;	// color of the direct light
+	float decayFactor;
+	float g;
+	vec3 ambientLightColor;
+	vec3 eyePos;		// position of the viewer
 } gubo;
 
 

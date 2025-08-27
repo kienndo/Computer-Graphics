@@ -23,12 +23,17 @@ struct VertexSimp {
 };
 
 struct GlobalUBO {
-    alignas(16) glm::vec3 lightDir;
+    alignas(16) glm::vec3 lightPos;
     alignas(16) glm::vec4 lightColor;
+    alignas(4) glm::float32 decayFactor;
+    alignas(4) glm::float32 g;
+    alignas(16) glm::vec3 ambientLightColor;
     alignas(16) glm::vec3 eyePos;
 };
 
 struct LocalUBO {
+    alignas(4) glm::float32 gamma;
+    alignas(16) glm::vec3 specularColor;
     alignas(16) glm::mat4 mvpMat;
     alignas(16) glm::mat4 mMat;
     alignas(16) glm::mat4 nMat;
@@ -181,7 +186,7 @@ protected:
 
         PMesh.init(this, &VDsimp,
         "shaders/Mesh.vert.spv",
-        "shaders/Mesh.frag.spv",{ &DSLglobal, &DSLmesh });
+        "shaders/Lambert-Blinn.frag.spv",{ &DSLglobal, &DSLmesh });
         PMesh.setCullMode(VK_CULL_MODE_NONE);
         PMesh.setPolygonMode(VK_POLYGON_MODE_FILL);
 
@@ -380,8 +385,11 @@ protected:
 
         // 5) Global UBO
         GlobalUBO g{};
-        g.lightDir   = glm::normalize(glm::vec3(1,2,3));
-        g.lightColor = glm::vec4(1,1,1,1);
+        g.lightPos   = glm::vec3(70,30,-40);
+        g.lightColor = glm::vec4(1,0.95,0.9,1);
+        g.decayFactor = 1.0f;
+        g.g = 50.0f;
+        g.ambientLightColor = glm::vec3(0.2f, 0.19f, 0.18f);
         g.eyePos     = camPos;
 
         // 6) Per-instance locals
@@ -389,6 +397,8 @@ protected:
             auto &inst = SC.TI[0].I[i];
 
             LocalUBO l{};
+            l.gamma = 150.0f;
+            l.specularColor = glm::vec3(1.0f, 0.95f, 0.9f);
             l.mMat   = inst.Wm;
             l.nMat   = glm::inverse(glm::transpose(l.mMat));
             l.mvpMat = Prj * View * l.mMat;
