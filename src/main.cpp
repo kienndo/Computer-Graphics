@@ -69,6 +69,10 @@ protected:
     bool showKeyOverlay = true;
     int  prevPlusState  = GLFW_RELEASE;
 
+    // --- Show List ---
+    bool showList = true;
+    int  prevLState = GLFW_RELEASE;
+
 
     OverlayUniformBuffer CornerUBO{}, KeyUBO{};  // default visible = 0.0f
 
@@ -117,7 +121,7 @@ protected:
         Ar = float(windowWidth) / float(windowHeight);
     }
 
-    void onWindowResize(int w, int h) {
+    void onWindowResize(int w, int h) override {
         std::cout << "Window resized to: " << w << " x " << h << "\n";
         if (h > 0) Ar = float(w) / float(h);
         RP.width  = w;
@@ -126,7 +130,7 @@ protected:
         //txt.resizeScreen(w, h);
     }
 
-    void localInit() {
+    void localInit() override {
 
         // DSLs
         // set = 0 (global)
@@ -189,6 +193,7 @@ protected:
         "shaders/Lambert-Blinn.frag.spv",{ &DSLglobal, &DSLmesh });
         PMesh.setCullMode(VK_CULL_MODE_NONE);
         PMesh.setPolygonMode(VK_POLYGON_MODE_FILL);
+        PMesh.setCompareOp(VK_COMPARE_OP_LESS_OR_EQUAL);
 
 
         PRs.resize(1);
@@ -240,7 +245,7 @@ protected:
               "SS",
               false, true, true,
               TAL_LEFT, TRH_LEFT, TRV_TOP);
-        txt.print(-0.98f, -0.37, ("" ), 1, "SS", false, true, true, TAL_LEFT, TRH_LEFT, TRV_TOP);
+        txt.print(-0.98f, -0.37, (""), 1, "SS", false, true, true, TAL_LEFT, TRH_LEFT, TRV_TOP);
         txt.updateCommandBuffer();
 
 
@@ -249,7 +254,7 @@ protected:
         buildSelectableFromJSON("assets/models/scene.json");
     }
 
-    void pipelinesAndDescriptorSetsInit() {
+    void pipelinesAndDescriptorSetsInit() override {
         RP.create();
         PMesh.create(&RP);
         POverlay.create(&RP);
@@ -264,7 +269,7 @@ protected:
         submitCommandBuffer("main", 0, populateCommandBufferAccess, this);
     }
 
-    void pipelinesAndDescriptorSetsCleanup() {
+    void pipelinesAndDescriptorSetsCleanup() override {
 
         PMesh.cleanup();
         DSGubo.cleanup();
@@ -294,7 +299,7 @@ protected:
         SC.localCleanup();
     }
 
-    void populateCommandBuffer(VkCommandBuffer cmdBuffer, int currentImage){
+    void populateCommandBuffer(VkCommandBuffer cmdBuffer, int currentImage) {
         RP.begin(cmdBuffer, currentImage);
 
         // --- Scene first ---
@@ -372,6 +377,7 @@ protected:
         handleKeyboardOverlay();
         handleModeToggle();
         handleDelete();
+        handleListDisplay();
 
         // 3) Update either camera or selected object based on mode
         updateFromInput(dt, m, r, fire);
@@ -430,6 +436,8 @@ protected:
         int state = glfwGetKey(window, GLFW_KEY_P);
         if (state == GLFW_PRESS && prevPlusState == GLFW_RELEASE) {
             showKeyOverlay = !showKeyOverlay;
+            txt.print(-0.98f, -0.27f, (showKeyOverlay ? "" : "Hold L to see all furnitures"),
+                      3, "SS", false, true, true, TAL_LEFT, TRH_LEFT, TRV_TOP);
             txt.print(-0.98f, -0.37f, (showKeyOverlay ? "" : "Press P to show keyboard actions"), 1, "SS", false, true, true, TAL_LEFT, TRH_LEFT, TRV_TOP);
             txt.updateCommandBuffer();
         }
@@ -441,21 +449,33 @@ protected:
         int kState = glfwGetKey(window, GLFW_KEY_D);
         if (kState == GLFW_PRESS && prevDelState == GLFW_RELEASE) {
             if (selectedListPos >= 0 && selectedListPos < (int)selectableIds.size()) {
-                const std::string& id = selectableIds[selectedListPos];
-                if (hiddenIds.count(id)) {
-                    hiddenIds.erase(id);
-                } else {
+                const std::string id = selectableIds[selectedListPos];
+
+                // Toggle visibility
+                if (hiddenIds.count(id) == 0) {
                     hiddenIds.insert(id);
+                    // Jump to None when hiding current
+                    selectedListPos = -1;
+                    selectedObjectIndex = -1;
+                    txt.print(-0.9f, -0.7f, "Currently editing: \nNone",
+                              4, "SS", false, true, true, TAL_LEFT, TRH_LEFT, TRV_TOP);
+                } else {
+                    hiddenIds.erase(id);
+                    // Keep selection None; user can TAB to pick again
                 }
-                // (optional) UI nudge
-                txt.print(-0.9f, -0.7f, hiddenIds.count(id) ? "Currently editing: \nNone"
-                                                            : ("Currently editing: \n" + id),
-                          4, "SS", false, true, true, TAL_LEFT, TRH_LEFT, TRV_TOP);
+
+                // If L is held, refresh the visible list immediately
+                if (glfwGetKey(window, GLFW_KEY_L) == GLFW_PRESS) {
+                    txt.print(-0.9f, -0.27f, makeVisibleListString(),
+                              3, "SS", false, true, true, TAL_LEFT, TRH_LEFT, TRV_TOP);
+                }
+
                 txt.updateCommandBuffer();
             }
         }
         prevDelState = kState;
     }
+
 
     static void populateCommandBufferAccess(VkCommandBuffer commandBuffer, int currentImage, void *params) {
         auto *app = reinterpret_cast<CG_hospital*>(params);
@@ -530,8 +550,30 @@ protected:
         }
     }
 
+    void handleListDisplay() {
+        int state = glfwGetKey(window, GLFW_KEY_L);
+
+        // L pressed -> show list (once on transition to avoid spamming)
+        if (state == GLFW_PRESS && prevLState == GLFW_RELEASE && !showKeyOverlay) {
+            txt.print(-0.9f, -0.27f, makeVisibleListString(),
+                      3, "SS", false, true, true, TAL_LEFT, TRH_LEFT, TRV_TOP);
+            txt.updateCommandBuffer();
+        }
+
+        // L released -> restore hint
+        if (state == GLFW_RELEASE && prevLState == GLFW_PRESS && !showKeyOverlay) {
+            txt.print(-0.98f, -0.27f, "Hold L to see all furnitures",
+                      3, "SS", false, true, true, TAL_LEFT, TRH_LEFT, TRV_TOP);
+            txt.updateCommandBuffer();
+        }
+
+        prevLState = state;
+    }
+
+
+
     void handleObjectSelection() {
-        // Rising-edge detection: fires once when the key goes from RELEASE -> PRESS
+        // Rising-edge detection: fires once when TAB goes RELEASE -> PRESS
         int state = glfwGetKey(window, GLFW_KEY_TAB);
         if (state == GLFW_PRESS && prevTabState == GLFW_RELEASE) {
             if (selectableIndices.empty()) {
@@ -539,29 +581,75 @@ protected:
                 selectedListPos     = -1;
                 std::cout << "No selectable objects.\n";
             } else {
-                selectedListPos = (selectedListPos + 1) % (int)selectableIndices.size();
-                selectedObjectIndex = selectableIndices[selectedListPos];
+                // Start from current (or -1) and advance to next *visible* one
+                if (selectedListPos < 0) selectedListPos = -1; // force wrap from start
+                if (!selectNextVisible(+1)) {
+                    // none visible
+                    txt.print(-0.9f, -0.7f, "Currently editing: \nNone",
+                              4, "SS", false, true, true, TAL_LEFT, TRH_LEFT, TRV_TOP);
+                    txt.updateCommandBuffer();
+                    std::cout << "No visible objects.\n";
+                    prevTabState = state;
+                    return;
+                }
 
                 const std::string& label =
                     (selectedListPos >= 0 && selectedListPos < (int)selectableIds.size())
-                    ? "Currently editing: \n" + selectableIds[selectedListPos]
-                    : std::string("instance_") + std::to_string(selectedObjectIndex);
-                txt.print(-0.9f, -0.7f, label,
-              4,
-              "SS",
-              false, true, true,
-              TAL_LEFT, TRH_LEFT, TRV_TOP);
+                    ? ("Currently editing: \n" + selectableIds[selectedListPos])
+                    : (std::string("instance_") + std::to_string(selectedObjectIndex));
 
-                txt.updateCommandBuffer();
+                txt.print(-0.9f, -0.7f, label, 4, "SS", false, true, true,
+                          TAL_LEFT, TRH_LEFT, TRV_TOP);
+                // If the list is currently visible, refresh it to reflect any changes
+                // If L is held, refresh list so any “current” cue or ordering changes show up
+                if (glfwGetKey(window, GLFW_KEY_L) == GLFW_PRESS) {
+                    txt.print(-0.9f, -0.27f, makeVisibleListString(),
+                              3, "SS", false, true, true, TAL_LEFT, TRH_LEFT, TRV_TOP);
+                    txt.updateCommandBuffer();
+                }
+
 
                 std::cout << "Selected object idx: " << selectedObjectIndex
                           << "  id: " << label << "\n";
             }
         }
         prevTabState = state;
-        txt.updateCommandBuffer();
-
     }
+
+    // --- visibility helpers ---
+    bool isVisibleAtListPos(int listPos) const {
+        return (listPos >= 0 && listPos < (int)selectableIds.size() &&
+                hiddenIds.count(selectableIds[listPos]) == 0);
+    }
+
+    std::string makeVisibleListString() const {
+        std::string s;
+        for (size_t i = 0; i < selectableIds.size(); ++i) {
+            if (hiddenIds.count(selectableIds[i]) == 0) s += selectableIds[i] + "\n";
+        }
+        if (s.empty()) s = "(no visible objects)";
+        return s;
+    }
+
+
+    // Move selection to next/prev *visible* item. Returns true if found one.
+    bool selectNextVisible(int step = +1) {
+        if (selectableIndices.empty()) { selectedListPos = -1; selectedObjectIndex = -1; return false; }
+        const int n = (int)selectableIndices.size();
+        for (int k = 0; k < n; ++k) {
+            selectedListPos = (selectedListPos + step + n) % n;
+            if (isVisibleAtListPos(selectedListPos)) {
+                selectedObjectIndex = selectableIndices[selectedListPos];
+                return true;
+            }
+        }
+        // none visible
+        selectedListPos = -1;
+        selectedObjectIndex = -1;
+        return false;
+    }
+
+
 };
 
 int main() {
@@ -570,4 +658,5 @@ int main() {
     try { app.run(); }
     catch (const std::exception& e) { std::cerr << e.what() << std::endl; return EXIT_FAILURE; }
     return EXIT_SUCCESS;
+
 }
