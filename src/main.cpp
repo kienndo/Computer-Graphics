@@ -123,7 +123,7 @@ protected:
         RP.width  = w;
         RP.height = h;
 
-        txt.resizeScreen(w, h);
+        //txt.resizeScreen(w, h);
     }
 
     void localInit() {
@@ -205,7 +205,7 @@ protected:
         DPSZs.texturesInPool      = 29;
         DPSZs.setsInPool          = 3;
 
-        MCorner.vertices = std::vector<unsigned char>(4 * sizeof(VertexOverlay));
+        /*MCorner.vertices = std::vector<unsigned char>(4 * sizeof(VertexOverlay));
         VertexOverlay *V1 = (VertexOverlay *)(&(MCorner.vertices[0]));
 
         V1[0] = { {-1.0f,  -0.7}, {0.0f, 0.0f} }; // bottom-left
@@ -216,7 +216,7 @@ protected:
         MCorner.indices = {0, 1, 2,    1, 2, 3};
         MCorner.initMesh(this, &VDoverlay);
 
-        TCorner.init(this, "assets/models/Untitled.png");
+        TCorner.init(this, "assets/models/Untitled.png");*/
 
         MKey.vertices = std::vector<unsigned char>(4 * sizeof(VertexOverlay));
         VertexOverlay *V2 = (VertexOverlay *)(&(MKey.vertices[0]));
@@ -240,7 +240,7 @@ protected:
               "SS",
               false, true, true,
               TAL_LEFT, TRH_LEFT, TRV_TOP);
-        txt.print(-0.98f, -0.37f, ("Press P to hide keyboard actions" ), 1, "SS", false, true, true, TAL_LEFT, TRH_LEFT, TRV_TOP);
+        txt.print(-0.98f, -0.37, ("" ), 1, "SS", false, true, true, TAL_LEFT, TRH_LEFT, TRV_TOP);
         txt.updateCommandBuffer();
 
 
@@ -255,7 +255,7 @@ protected:
         POverlay.create(&RP);
 
         DSGubo.init(this, &DSLglobal, {});
-        DSCorner.init(this, &DSLoverlay, {TCorner.getViewAndSampler()});
+        //DSCorner.init(this, &DSLoverlay, {TCorner.getViewAndSampler()});
         DSKey.init(this, &DSLoverlay, {TKey.getViewAndSampler()});
 
         SC.pipelinesAndDescriptorSetsInit();
@@ -267,19 +267,19 @@ protected:
     void pipelinesAndDescriptorSetsCleanup() {
 
         PMesh.cleanup();
-        RP.cleanup();
         DSGubo.cleanup();
         POverlay.cleanup();
-        DSCorner.cleanup();
+        //DSCorner.cleanup();
         DSKey.cleanup();
+        RP.cleanup();
 
         SC.pipelinesAndDescriptorSetsCleanup();
         txt.pipelinesAndDescriptorSetsCleanup();
     }
 
     void localCleanup() {
-        TCorner.cleanup();
-        MCorner.cleanup();
+       // TCorner.cleanup();
+        //MCorner.cleanup();
         TKey.cleanup();
         MKey.cleanup();
         DSLoverlay.cleanup();
@@ -287,8 +287,8 @@ protected:
         DSLglobal.cleanup();
         DSLmesh.cleanup();
         PMesh.destroy();
-        RP.destroy();
         POverlay.destroy();
+        RP.destroy();
 
         txt.localCleanup();
         SC.localCleanup();
@@ -303,11 +303,11 @@ protected:
         SC.populateCommandBuffer(cmdBuffer, 0, currentImage);     // draws all mesh instances
 
         POverlay.bind(cmdBuffer);
-        DSCorner.bind(cmdBuffer, POverlay, 0, currentImage);
+        /*DSCorner.bind(cmdBuffer, POverlay, 0, currentImage);
         MCorner.bind(cmdBuffer);
         vkCmdDrawIndexed(cmdBuffer,
         static_cast<uint32_t>(MCorner.indices.size()), 1, 0, 0, 0);
-
+*/
         DSKey.bind(cmdBuffer, POverlay, 0, currentImage);
         MKey.bind(cmdBuffer);
         vkCmdDrawIndexed(cmdBuffer,static_cast<uint32_t>(MKey.indices.size()), 1, 0, 0, 0);
@@ -418,8 +418,8 @@ protected:
         }
 
         // 7) Overlay
-        CornerUBO.visible = 1.0f;
-        DSCorner.map(currentImage, &CornerUBO, 0);
+        //CornerUBO.visible = 1.0f;
+        //DSCorner.map(currentImage, &CornerUBO, 0);
 
         KeyUBO.visible = showKeyOverlay ? 1.0f : 0.0f;
         DSKey.map(currentImage, &KeyUBO, 0);
@@ -430,7 +430,7 @@ protected:
         int state = glfwGetKey(window, GLFW_KEY_P);
         if (state == GLFW_PRESS && prevPlusState == GLFW_RELEASE) {
             showKeyOverlay = !showKeyOverlay;
-            txt.print(-0.98f, -0.37f, (showKeyOverlay ? "Press P to hide keyboard actions" : "Press P to show keyboard actions"), 1, "SS", false, true, true, TAL_LEFT, TRH_LEFT, TRV_TOP);
+            txt.print(-0.98f, -0.37f, (showKeyOverlay ? "" : "Press P to show keyboard actions"), 1, "SS", false, true, true, TAL_LEFT, TRH_LEFT, TRV_TOP);
             txt.updateCommandBuffer();
         }
         prevPlusState = state;
