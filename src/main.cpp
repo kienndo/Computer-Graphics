@@ -53,8 +53,8 @@ struct VertexOverlay {
 class CG_hospital : public BaseProject {
 protected:
     float Ar = 4.0f/3.0f;
-    int  selectedObjectIndex = -1;   // real instance index into SC.TI[0].I[...]
-    int  selectedListPos     = -1;   // position inside selectableIndices
+
+    // Iterate through assets
     bool tabPressed          = false;
     int prevTabState = GLFW_RELEASE;
 
@@ -74,11 +74,12 @@ protected:
     bool showList = true;
     int  prevLState = GLFW_RELEASE;
 
-
-    OverlayUniformBuffer CornerUBO{}, KeyUBO{};  // default visible = 0.0f
+    OverlayUniformBuffer KeyUBO{};  // default visible = 0.0f
 
     std::vector<int> selectableIndices;     // instance indices you can select
     std::vector<std::string> selectableIds; // their human-readable IDs from JSON (optional UI)
+    int  selectedObjectIndex = -1;   // real instance index into SC.TI[0].I[...]
+    int  selectedListPos     = -1;   // position inside selectableIndices
 
     RenderPass RP;
     DescriptorSetLayout DSLglobal, DSLmesh, DSLoverlay;
@@ -86,9 +87,9 @@ protected:
     VertexDescriptor VDsimp, VDoverlay;
     Pipeline         PMesh, POverlay;
 
-    DescriptorSet    DSGubo, DSCorner, DSKey;
-    Texture TCorner, TKey;
-    Model MCorner, MKey;
+    DescriptorSet    DSGubo, DSKey;
+    Texture TKey;
+    Model MKey;
 
     // Several Models
     Scene SC;
@@ -119,7 +120,6 @@ protected:
         windowHeight = 720;
         windowTitle = "CG_hospital";
         windowResizable = GLFW_TRUE;
-        Ar = float(windowWidth) / float(windowHeight);
     }
 
     void onWindowResize(int w, int h) override {
@@ -127,13 +127,10 @@ protected:
         if (h > 0) Ar = float(w) / float(h);
         RP.width  = w;
         RP.height = h;
-
-        //txt.resizeScreen(w, h);
     }
 
     void localInit() override {
 
-        // DSLs
         // set = 0 (global)
         DSLglobal.init(this, {
           { 0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, VK_SHADER_STAGE_ALL_GRAPHICS,
@@ -155,7 +152,6 @@ protected:
                  {1, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT, 0, 1}
               });
 
-        // Vertex layout
         VDsimp.init(this,
         { {0, sizeof(VertexSimp), VK_VERTEX_INPUT_RATE_VERTEX} },
         {
@@ -204,25 +200,12 @@ protected:
                         /* binding 0: UBO  */ { true, 0, {} },
                         /* binding 1: tex  */ { true, 1, { } }
                       } } }
-        }, /*TotalNtextures*/2, &VDsimp);
+        }, 2, &VDsimp);
 
         // Pool sizing
         DPSZs.uniformBlocksInPool = 4;
         DPSZs.texturesInPool      = 29;
         DPSZs.setsInPool          = 3;
-
-        /*MCorner.vertices = std::vector<unsigned char>(4 * sizeof(VertexOverlay));
-        VertexOverlay *V1 = (VertexOverlay *)(&(MCorner.vertices[0]));
-
-        V1[0] = { {-1.0f,  -0.7}, {0.0f, 0.0f} }; // bottom-left
-        V1[1] = { {-1.0f,  -1.0f   }, {0.0f, 1.0f} }; // top-left
-        V1[2] = { {-0.6f, -0.7}, {1.0f, 0.0f} }; // bottom-right
-        V1[3] = { {-0.6f, -1.0f   }, {1.0f, 1.0f} }; // top-right
-
-        MCorner.indices = {0, 1, 2,    1, 2, 3};
-        MCorner.initMesh(this, &VDoverlay);
-
-        TCorner.init(this, "assets/models/Untitled.png");*/
 
         MKey.vertices = std::vector<unsigned char>(4 * sizeof(VertexOverlay));
         VertexOverlay *V2 = (VertexOverlay *)(&(MKey.vertices[0]));
@@ -238,15 +221,16 @@ protected:
         TKey.init(this, "assets/models/Keyboard.png");
 
         txt.init(this, windowWidth, windowHeight);
+        txt.resizeScreen(RP.width, RP.height);
 
         // Add a tiny dummy
-        txt.print(-0.9f, -0.9f, ("CAM MODE"), 2, "SS");
-        txt.print(-0.9f, -0.7f, "Currently editing: \nNone",
+        txt.print(-0.95f, -0.95f, ("CAM MODE"), 2, "SS");
+        txt.print(-0.95f, -0.85f, "Currently editing: \nNone",
               4,
               "SS",
               false, true, true,
               TAL_LEFT, TRH_LEFT, TRV_TOP);
-        txt.print(-0.98f, -0.37, (""), 1, "SS", false, true, true, TAL_LEFT, TRH_LEFT, TRV_TOP);
+        txt.print(-0.95f, -0.75, (""), 1, "SS", false, true, true, TAL_LEFT, TRH_LEFT, TRV_TOP);
         txt.updateCommandBuffer();
 
 
@@ -261,7 +245,6 @@ protected:
         POverlay.create(&RP);
 
         DSGubo.init(this, &DSLglobal, {});
-        //DSCorner.init(this, &DSLoverlay, {TCorner.getViewAndSampler()});
         DSKey.init(this, &DSLoverlay, {TKey.getViewAndSampler()});
 
         SC.pipelinesAndDescriptorSetsInit();
@@ -275,7 +258,6 @@ protected:
         PMesh.cleanup();
         DSGubo.cleanup();
         POverlay.cleanup();
-        //DSCorner.cleanup();
         DSKey.cleanup();
         RP.cleanup();
 
@@ -284,8 +266,6 @@ protected:
     }
 
     void localCleanup() {
-       // TCorner.cleanup();
-        //MCorner.cleanup();
         TKey.cleanup();
         MKey.cleanup();
         DSLoverlay.cleanup();
@@ -303,17 +283,11 @@ protected:
     void populateCommandBuffer(VkCommandBuffer cmdBuffer, int currentImage) {
         RP.begin(cmdBuffer, currentImage);
 
-        // --- Scene first ---
         PMesh.bind(cmdBuffer);
         DSGubo.bind(cmdBuffer, PMesh, 0, currentImage);           // set=0 for scene
         SC.populateCommandBuffer(cmdBuffer, 0, currentImage);     // draws all mesh instances
 
         POverlay.bind(cmdBuffer);
-        /*DSCorner.bind(cmdBuffer, POverlay, 0, currentImage);
-        MCorner.bind(cmdBuffer);
-        vkCmdDrawIndexed(cmdBuffer,
-        static_cast<uint32_t>(MCorner.indices.size()), 1, 0, 0, 0);
-*/
         DSKey.bind(cmdBuffer, POverlay, 0, currentImage);
         MKey.bind(cmdBuffer);
         vkCmdDrawIndexed(cmdBuffer,static_cast<uint32_t>(MKey.indices.size()), 1, 0, 0, 0);
@@ -321,16 +295,6 @@ protected:
         RP.end(cmdBuffer);
     }
 
-    void handleModeToggle() {
-        int s = glfwGetKey(window, GLFW_KEY_Q);
-        if (s == GLFW_PRESS && prevQState == GLFW_RELEASE) {
-            editMode = !editMode;
-            std::cout << (editMode ? "[MODE] Edit\n" : "[MODE] Camera\n");
-            txt.print(-0.9f, -0.9f, (editMode ? "EDIT MODE" : "CAM MODE"), 2, "SS");
-            txt.updateCommandBuffer();
-        }
-        prevQState = s;
-    }
 
     void updateFromInput(float dt, const glm::vec3& m, const glm::vec3& r, bool fire) {
         const float ROT_SPEED       = glm::radians(120.0f);
@@ -366,24 +330,20 @@ protected:
 
         if (glfwGetKey(window, GLFW_KEY_ESCAPE)) glfwSetWindowShouldClose(window, GL_TRUE);
 
-        // 1) Input (once)
         float dt = 0.0f;
         glm::vec3 m(0.0f), r(0.0f);
         bool fire = false;
 
         getSixAxis(dt, m, r, fire);
 
-        // 2) Selection & mode toggle (edge-triggered)
         handleObjectSelection();
         handleKeyboardOverlay();
         handleModeToggle();
         handleDelete();
         handleListDisplay();
 
-        // 3) Update either camera or selected object based on mode
         updateFromInput(dt, m, r, fire);
 
-        // 4) Matrices
         float Ar = float(windowWidth) / float(windowHeight);
         glm::mat4 Prj = glm::perspective(glm::radians(60.0f), Ar, 0.01f, 200.0f);
         Prj[1][1] *= -1.0f;
@@ -397,12 +357,10 @@ protected:
             glm::vec4(10, 35, 20, 1)
         };
 
-        // 5) Global UBO
         GlobalUBO g{};
         for (int i = 0; i < 4; i++) {
             g.lightPos[i] = LightPos[i];
         }
-
         g.lightColor = glm::vec4(1,0.95,0.9,1);
         g.decayFactor = 1.0f;
         g.g = 20.0f;
@@ -410,7 +368,6 @@ protected:
         g.ambientLightColor = glm::vec3(0.1f, 0.095f, 0.09f);
         g.eyePos     = camPos;
 
-        // 6) Per-instance locals
         for (int i = 0; i < SC.TI[0].InstanceCount; ++i) {
             auto &inst = SC.TI[0].I[i];
 
@@ -430,14 +387,9 @@ protected:
                 visible                                           // w: visibility flag (1=show, 0=hide)
             );
 
-
             inst.DS[0][0]->map(currentImage, &g, 0);  // global
             inst.DS[0][1]->map(currentImage, &l, 0);  // local
         }
-
-        // 7) Overlay
-        //CornerUBO.visible = 1.0f;
-        //DSCorner.map(currentImage, &CornerUBO, 0);
 
         KeyUBO.visible = showKeyOverlay ? 1.0f : 0.0f;
         DSKey.map(currentImage, &KeyUBO, 0);
@@ -448,9 +400,9 @@ protected:
         int state = glfwGetKey(window, GLFW_KEY_P);
         if (state == GLFW_PRESS && prevPlusState == GLFW_RELEASE) {
             showKeyOverlay = !showKeyOverlay;
-            txt.print(-0.98f, -0.27f, (showKeyOverlay ? "" : "Hold L to see all furnitures"),
+            txt.print(-0.95f, -0.7, (showKeyOverlay ? "" : "Hold L to see all furnitures"),
                       3, "SS", false, true, true, TAL_LEFT, TRH_LEFT, TRV_TOP);
-            txt.print(-0.98f, -0.37f, (showKeyOverlay ? "" : "Press P to show keyboard actions"), 1, "SS", false, true, true, TAL_LEFT, TRH_LEFT, TRV_TOP);
+            txt.print(-0.95f, -0.75, (showKeyOverlay ? "" : "Press P to show keyboard actions"), 1, "SS", false, true, true, TAL_LEFT, TRH_LEFT, TRV_TOP);
             txt.updateCommandBuffer();
         }
         prevPlusState = state;
@@ -459,35 +411,94 @@ protected:
     void handleDelete() {
         // --- Hide current selection (K toggles) ---
         int kState = glfwGetKey(window, GLFW_KEY_D);
-        if (kState == GLFW_PRESS && prevDelState == GLFW_RELEASE) {
+        if (kState == GLFW_PRESS && prevDelState == GLFW_RELEASE && editMode) {
             if (selectedListPos >= 0 && selectedListPos < (int)selectableIds.size()) {
                 const std::string id = selectableIds[selectedListPos];
+                const bool wasVisible = (hiddenIds.count(id) == 0);
 
-                // Toggle visibility
-                if (hiddenIds.count(id) == 0) {
+                if (wasVisible) {
                     hiddenIds.insert(id);
-                    // Jump to None when hiding current
                     selectedListPos = -1;
                     selectedObjectIndex = -1;
-                    txt.print(-0.9f, -0.7f, "Currently editing: \nNone",
-                              4, "SS", false, true, true, TAL_LEFT, TRH_LEFT, TRV_TOP);
                 } else {
                     hiddenIds.erase(id);
-                    // Keep selection None; user can TAB to pick again
+                    // keep selection as None; user can TAB to choose again
                 }
 
-                // If L is held, refresh the visible list immediately
+                // Always refresh the "Currently editing" label
+                const std::string curr =
+                    (selectedListPos >= 0 && selectedListPos < (int)selectableIds.size())
+                    ? "Currently editing: \n" + selectableIds[selectedListPos]
+                    : "Currently editing: \nNone";
+                txt.print(-0.95f, -0.85f, curr,
+                          4, "SS", false, true, true, TAL_LEFT, TRH_LEFT, TRV_TOP);
+
+                // Refresh list only if L is currently held
                 if (glfwGetKey(window, GLFW_KEY_L) == GLFW_PRESS) {
-                    txt.print(-0.9f, -0.27f, makeVisibleListString(),
+                    txt.print(-0.95f, -0.7f, makeVisibleListString(),
                               3, "SS", false, true, true, TAL_LEFT, TRH_LEFT, TRV_TOP);
                 }
-
                 txt.updateCommandBuffer();
             }
         }
         prevDelState = kState;
     }
 
+    void handleModeToggle() {
+        int s = glfwGetKey(window, GLFW_KEY_Q);
+        if (s == GLFW_PRESS && prevQState == GLFW_RELEASE) {
+            editMode = !editMode;
+            std::cout << (editMode ? "[MODE] Edit\n" : "[MODE] Camera\n");
+            txt.print(-0.95f, -0.95f, (editMode ? "EDIT MODE" : "CAM MODE"), 2, "SS");
+            txt.updateCommandBuffer();
+        }
+        prevQState = s;
+    }
+
+    void handleListDisplay() {
+        int state = glfwGetKey(window, GLFW_KEY_L);
+
+        // pressed -> show list
+        if (state == GLFW_PRESS && prevLState == GLFW_RELEASE && !showKeyOverlay) {
+            txt.print(-0.95f, -0.7f, makeVisibleListString(),
+                      3, "SS", false, true, true, TAL_LEFT, TRH_LEFT, TRV_TOP);
+            txt.updateCommandBuffer();
+        }
+
+        // released -> show hint (do NOT touch the "Currently editing" line)
+        if (state == GLFW_RELEASE && prevLState == GLFW_PRESS && !showKeyOverlay) {
+            txt.print(-0.95f, -0.7f, "Press L to see all furnitures",
+                      3, "SS", false, true, true, TAL_LEFT, TRH_LEFT, TRV_TOP);
+            txt.updateCommandBuffer();
+        }
+
+        prevLState = state;
+    }
+
+    void handleObjectSelection() {
+        int state = glfwGetKey(window, GLFW_KEY_TAB);
+        if (state == GLFW_PRESS && prevTabState == GLFW_RELEASE) {
+            if (selectableIndices.empty() || !selectNextVisible(+1)) {
+                selectedListPos = -1;
+                selectedObjectIndex = -1;
+            }
+            const std::string curr =
+                (selectedListPos >= 0 && selectedListPos < (int)selectableIds.size())
+                ? "Currently editing: \n" + selectableIds[selectedListPos]
+                : "Currently editing: \nNone";
+
+            txt.print(-0.95f, -0.85f, curr,
+                      4, "SS", false, true, true, TAL_LEFT, TRH_LEFT, TRV_TOP);
+
+            // Optional: if L held, refresh the list content too
+            if (glfwGetKey(window, GLFW_KEY_L) == GLFW_PRESS) {
+                txt.print(-0.95f, -0.7f, makeVisibleListString(),
+                          3, "SS", false, true, true, TAL_LEFT, TRH_LEFT, TRV_TOP);
+            }
+            txt.updateCommandBuffer();
+        }
+        prevTabState = state;
+    }
 
     static void populateCommandBufferAccess(VkCommandBuffer commandBuffer, int currentImage, void *params) {
         auto *app = reinterpret_cast<CG_hospital*>(params);
@@ -548,7 +559,6 @@ protected:
         if (glfwGetKey(window, GLFW_KEY_G) == GLFW_PRESS) inst.Wm = inst.Wm * glm::rotate(glm::mat4(1), -ROT*dt, glm::vec3(0,1,0));
 
         // --- SCALE uniformly in LOCAL space (post-multiply) ---
-
         float step = std::pow(SCL, dt * 5.0f);
 
         if (glfwGetKey(window, GLFW_KEY_S) == GLFW_PRESS) {
@@ -562,73 +572,6 @@ protected:
         }
     }
 
-    void handleListDisplay() {
-        int state = glfwGetKey(window, GLFW_KEY_L);
-
-        // L pressed -> show list (once on transition to avoid spamming)
-        if (state == GLFW_PRESS && prevLState == GLFW_RELEASE && !showKeyOverlay) {
-            txt.print(-0.9f, -0.27f, makeVisibleListString(),
-                      3, "SS", false, true, true, TAL_LEFT, TRH_LEFT, TRV_TOP);
-            txt.updateCommandBuffer();
-        }
-
-        // L released -> restore hint
-        if (state == GLFW_RELEASE && prevLState == GLFW_PRESS && !showKeyOverlay) {
-            txt.print(-0.98f, -0.27f, "Hold L to see all furnitures",
-                      3, "SS", false, true, true, TAL_LEFT, TRH_LEFT, TRV_TOP);
-            txt.updateCommandBuffer();
-        }
-
-        prevLState = state;
-    }
-
-
-
-    void handleObjectSelection() {
-        // Rising-edge detection: fires once when TAB goes RELEASE -> PRESS
-        int state = glfwGetKey(window, GLFW_KEY_TAB);
-        if (state == GLFW_PRESS && prevTabState == GLFW_RELEASE) {
-            if (selectableIndices.empty()) {
-                selectedObjectIndex = -1;
-                selectedListPos     = -1;
-                std::cout << "No selectable objects.\n";
-            } else {
-                // Start from current (or -1) and advance to next *visible* one
-                if (selectedListPos < 0) selectedListPos = -1; // force wrap from start
-                if (!selectNextVisible(+1)) {
-                    // none visible
-                    txt.print(-0.9f, -0.7f, "Currently editing: \nNone",
-                              4, "SS", false, true, true, TAL_LEFT, TRH_LEFT, TRV_TOP);
-                    txt.updateCommandBuffer();
-                    std::cout << "No visible objects.\n";
-                    prevTabState = state;
-                    return;
-                }
-
-                const std::string& label =
-                    (selectedListPos >= 0 && selectedListPos < (int)selectableIds.size())
-                    ? ("Currently editing: \n" + selectableIds[selectedListPos])
-                    : (std::string("instance_") + std::to_string(selectedObjectIndex));
-
-                txt.print(-0.9f, -0.7f, label, 4, "SS", false, true, true,
-                          TAL_LEFT, TRH_LEFT, TRV_TOP);
-                // If the list is currently visible, refresh it to reflect any changes
-                // If L is held, refresh list so any “current” cue or ordering changes show up
-                if (glfwGetKey(window, GLFW_KEY_L) == GLFW_PRESS) {
-                    txt.print(-0.9f, -0.27f, makeVisibleListString(),
-                              3, "SS", false, true, true, TAL_LEFT, TRH_LEFT, TRV_TOP);
-                    txt.updateCommandBuffer();
-                }
-
-
-                std::cout << "Selected object idx: " << selectedObjectIndex
-                          << "  id: " << label << "\n";
-            }
-        }
-        prevTabState = state;
-    }
-
-    // --- visibility helpers ---
     bool isVisibleAtListPos(int listPos) const {
         return (listPos >= 0 && listPos < (int)selectableIds.size() &&
                 hiddenIds.count(selectableIds[listPos]) == 0);
@@ -636,39 +579,34 @@ protected:
 
     std::string makeVisibleListString() const {
         std::string s;
-        for (size_t i = 0; i < selectableIds.size(); ++i) {
-            if (hiddenIds.count(selectableIds[i]) == 0) s += selectableIds[i] + "\n";
-        }
+        for (size_t i = 0; i < selectableIds.size(); ++i)
+            if (hiddenIds.count(selectableIds[i]) == 0)
+                s += selectableIds[i] + "\n";
         if (s.empty()) s = "(no visible objects)";
         return s;
     }
 
-
-    // Move selection to next/prev *visible* item. Returns true if found one.
     bool selectNextVisible(int step = +1) {
         if (selectableIndices.empty()) { selectedListPos = -1; selectedObjectIndex = -1; return false; }
         const int n = (int)selectableIndices.size();
         for (int k = 0; k < n; ++k) {
             selectedListPos = (selectedListPos + step + n) % n;
-            if (isVisibleAtListPos(selectedListPos)) {
+            if (hiddenIds.count(selectableIds[selectedListPos]) == 0) {
                 selectedObjectIndex = selectableIndices[selectedListPos];
                 return true;
             }
         }
-        // none visible
-        selectedListPos = -1;
-        selectedObjectIndex = -1;
-        return false;
+        selectedListPos = -1; selectedObjectIndex = -1; return false;
     }
-
-
 };
 
 int main() {
 
     CG_hospital app;
     try { app.run(); }
-    catch (const std::exception& e) { std::cerr << e.what() << std::endl; return EXIT_FAILURE; }
+    catch (const std::exception& e) {
+        std::cerr << e.what() << std::endl;
+        return EXIT_FAILURE; }
     return EXIT_SUCCESS;
 
 }
