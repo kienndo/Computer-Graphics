@@ -8,10 +8,11 @@ layout(location = 2) in vec2 fragUV;
 layout(location = 0) out vec4 outColor;
 
 layout(set = 0, binding = 0) uniform GlobalUniformBufferObject {
-	vec3 lightPos;
-	vec4 lightColor;
-	float decayFactor;
-	float g;
+    vec4 lightPos[4];
+    vec4 lightColor;
+    float decayFactor;
+    float g;
+    float numLights;
 	vec3 ambientLightColor;
 	vec3 eyePos;
 } gubo;
@@ -27,25 +28,37 @@ layout(set = 1, binding = 0) uniform UniformBufferObject {
 
 layout(set = 1, binding = 1) uniform sampler2D tex;
 
-void main() {
-	vec3 Norm = normalize(fragNorm);
+vec3 calculateColorForEachLight(vec4 lightPos, vec3 albedo) {
+    vec3 Norm = normalize(fragNorm);
 	vec3 EyeDir = normalize(gubo.eyePos - fragPos);
 
-	vec3 LightDir = normalize(gubo.lightPos - fragPos);
-	float LightDistance = length(gubo.lightPos - fragPos);
+    vec3 LightDir = normalize(lightPos.xyz - fragPos);
+	float LightDistance = length(lightPos.xyz - fragPos);
 
 	vec3 LightModel = gubo.lightColor.rgb * pow((gubo.g / LightDistance), gubo.decayFactor);
 
-	vec3 albedo = texture(tex, fragUV).rgb;
 	vec3 MD = albedo;
-
 	vec3 Diffuse = MD * clamp(dot(LightDir, Norm), 0.0f, 1.0f);
 
 	vec3 MS = ubo.specularColor;
 	vec3 Specular = MS * pow(clamp(dot(Norm, normalize(LightDir + EyeDir)), 0.0f, 1.0f), ubo.gamma);
 
-	vec3 MA = albedo;
+    vec3 color = LightModel * (Diffuse + Specular);
+    vec3 toneMapped = color / (color + vec3(1.0f));
+
+    return toneMapped;
+}
+
+void main() {
+    vec3 albedo = texture(tex, fragUV).rgb;
+    vec3 color = vec3(0.0f);
+
+    for (int i  = 0; i < gubo.numLights; ++i) {
+        color += calculateColorForEachLight(gubo.lightPos[i], albedo);
+    }
+
+    vec3 MA = albedo;
     vec3 Ambient = MA * gubo.ambientLightColor;
 
-	outColor = vec4(LightModel * (Diffuse + Specular) + Ambient, 1.0f);
+	outColor = vec4(color + Ambient, 1.0f);
 }

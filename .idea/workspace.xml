@@ -29,10 +29,7 @@
     </configurations>
   </component>
   <component name="ChangeListManager">
-    <list default="true" id="72edde42-13d2-4df3-b1df-094f5281efff" name="Changes" comment="Removed unused objects from scene.json">
-      <change beforePath="$PROJECT_DIR$/.idea/editor.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/editor.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/.idea/shelf/Uncommitted_changes_before_Update_at_20_08_2025,_13_41_[Changes]/shelved.patch" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/.idea/shelf/Uncommitted_changes_before_Update_at_20_08_2025__13_41__Changes_.xml" beforeDir="false" />
+    <list default="true" id="72edde42-13d2-4df3-b1df-094f5281efff" name="Changes" comment="Shader works good now with one point light">
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/shaders/Lambert-Blinn.frag" beforeDir="false" afterPath="$PROJECT_DIR$/shaders/Lambert-Blinn.frag" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/shaders/Lambert-Blinn.frag.spv" beforeDir="false" afterPath="$PROJECT_DIR$/shaders/Lambert-Blinn.frag.spv" afterDir="false" />
@@ -56,19 +53,17 @@
     &quot;assignee&quot;: &quot;kienndo&quot;
   }
 }</component>
-  <component name="GithubPullRequestsUISettings"><![CDATA[{
-  "selectedUrlAndAccountId": {
-    "url": "https://github.com/kienndo/CG_hospital.git",
-    "accountId": "dbf31e7a-09f9-4a74-ac2d-880dcd4a4892"
+  <component name="GithubPullRequestsUISettings">{
+  &quot;selectedUrlAndAccountId&quot;: {
+    &quot;url&quot;: &quot;https://github.com/kienndo/CG_hospital.git&quot;,
+    &quot;accountId&quot;: &quot;dbf31e7a-09f9-4a74-ac2d-880dcd4a4892&quot;
   }
-}]]></component>
+}</component>
   <component name="HighlightingSettingsPerFile">
     <setting file="mock://C:/Users/julie/CLionProjects/CG_hospital/src/main.cpp" root0="SKIP_HIGHLIGHTING" />
     <setting file="mock://C:/Users/julie/CLionProjects/CG_hospital/src/main.cpp" root0="SKIP_HIGHLIGHTING" />
-    <setting file="mock://diff.cpp" root0="SKIP_HIGHLIGHTING" />
-    <setting file="mock://diff.cpp" root0="SKIP_HIGHLIGHTING" />
-    <setting file="mock://diff.cpp" root0="SKIP_HIGHLIGHTING" />
-    <setting file="mock://diff.cpp" root0="SKIP_HIGHLIGHTING" />
+    <setting file="mock://C:/Users/julie/CLionProjects/CG_hospital/src/main.cpp" root0="SKIP_HIGHLIGHTING" />
+    <setting file="mock://C:/Users/julie/CLionProjects/CG_hospital/src/main.cpp" root0="SKIP_HIGHLIGHTING" />
   </component>
   <component name="ProjectApplicationVersion">
     <option name="ide" value="CLion" />
@@ -151,7 +146,7 @@
       <workItem from="1755707332338" duration="9875000" />
       <workItem from="1755774526039" duration="20934000" />
       <workItem from="1755961050222" duration="478000" />
-      <workItem from="1756369463695" duration="5257000" />
+      <workItem from="1756369463695" duration="13645000" />
     </task>
     <task id="LOCAL−00001" summary="one aircondition through scene.json works">
       <option name="closed" value="true" />
@@ -176,7 +171,15 @@
       <option name="project" value="LOCAL" />
       <updated>1756370251379</updated>
     </task>
-    <option name="localTasksCounter" value="4" />
+    <task id="LOCAL-00004" summary="Shader works good now with one point light">
+      <option name="closed" value="true" />
+      <created>1756379025519</created>
+      <option name="number" value="00004" />
+      <option name="presentableId" value="LOCAL-00004" />
+      <option name="project" value="LOCAL" />
+      <updated>1756379025519</updated>
+    </task>
+    <option name="localTasksCounter" value="5" />
     <servers />
   </component>
   <component name="TypeScriptGeneratedFilesManager">
@@ -206,6 +209,7 @@
     <MESSAGE value="one aircondition through scene.json works" />
     <MESSAGE value="Added shader with Lambert diffuse and Blinn speculart + ambient light" />
     <MESSAGE value="Removed unused objects from scene.json" />
-    <option name="LAST_COMMIT_MESSAGE" value="Removed unused objects from scene.json" />
+    <MESSAGE value="Shader works good now with one point light" />
+    <option name="LAST_COMMIT_MESSAGE" value="Shader works good now with one point light" />
   </component>
 </project>

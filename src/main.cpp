@@ -23,10 +23,11 @@ struct VertexSimp {
 };
 
 struct GlobalUBO {
-    alignas(16) glm::vec3 lightPos;
+    alignas(16) glm::vec4 lightPos[4];
     alignas(16) glm::vec4 lightColor;
     alignas(4) glm::float32 decayFactor;
     alignas(4) glm::float32 g;
+    alignas(4) glm::float32 numLights;
     alignas(16) glm::vec3 ambientLightColor;
     alignas(16) glm::vec3 eyePos;
 };
@@ -389,12 +390,23 @@ protected:
 
         glm::mat4 View = glm::lookAt(camPos, camPos + camFwd, glm::vec3(0,1,0));
 
+        glm::vec4 LightPos[4] = {
+            glm::vec4(70, 35, -30, 1),
+            glm::vec4(10, 35, -30, 1),
+            glm::vec4(-60, 35, -20, 1),
+            glm::vec4(10, 35, 20, 1)
+        };
+
         // 5) Global UBO
         GlobalUBO g{};
-        g.lightPos   = glm::vec3(0,35,-30);
+        for (int i = 0; i < 4; i++) {
+            g.lightPos[i] = LightPos[i];
+        }
+
         g.lightColor = glm::vec4(1,0.95,0.9,1);
         g.decayFactor = 1.0f;
         g.g = 20.0f;
+        g.numLights = 4;
         g.ambientLightColor = glm::vec3(0.1f, 0.095f, 0.09f);
         g.eyePos     = camPos;
 
