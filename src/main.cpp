@@ -74,7 +74,7 @@ protected:
     int  prevLState = GLFW_RELEASE;
 
 
-    OverlayUniformBuffer CornerUBO{}, KeyUBO{};  // default visible = 0.0f
+    OverlayUniformBuffer KeyUBO{};  // default visible = 0.0f
 
     std::vector<int> selectableIndices;     // instance indices you can select
     std::vector<std::string> selectableIds; // their human-readable IDs from JSON (optional UI)
@@ -85,9 +85,9 @@ protected:
     VertexDescriptor VDsimp, VDoverlay;
     Pipeline         PMesh, POverlay;
 
-    DescriptorSet    DSGubo, DSCorner, DSKey;
-    Texture TCorner, TKey;
-    Model MCorner, MKey;
+    DescriptorSet    DSGubo, DSKey;
+    Texture TKey;
+    Model MKey;
 
     // Several Models
     Scene SC;
@@ -118,7 +118,6 @@ protected:
         windowHeight = 720;
         windowTitle = "CG_hospital";
         windowResizable = GLFW_TRUE;
-        Ar = float(windowWidth) / float(windowHeight);
     }
 
     void onWindowResize(int w, int h) override {
@@ -210,19 +209,6 @@ protected:
         DPSZs.texturesInPool      = 29;
         DPSZs.setsInPool          = 3;
 
-        /*MCorner.vertices = std::vector<unsigned char>(4 * sizeof(VertexOverlay));
-        VertexOverlay *V1 = (VertexOverlay *)(&(MCorner.vertices[0]));
-
-        V1[0] = { {-1.0f,  -0.7}, {0.0f, 0.0f} }; // bottom-left
-        V1[1] = { {-1.0f,  -1.0f   }, {0.0f, 1.0f} }; // top-left
-        V1[2] = { {-0.6f, -0.7}, {1.0f, 0.0f} }; // bottom-right
-        V1[3] = { {-0.6f, -1.0f   }, {1.0f, 1.0f} }; // top-right
-
-        MCorner.indices = {0, 1, 2,    1, 2, 3};
-        MCorner.initMesh(this, &VDoverlay);
-
-        TCorner.init(this, "assets/models/Untitled.png");*/
-
         MKey.vertices = std::vector<unsigned char>(4 * sizeof(VertexOverlay));
         VertexOverlay *V2 = (VertexOverlay *)(&(MKey.vertices[0]));
 
@@ -260,7 +246,6 @@ protected:
         POverlay.create(&RP);
 
         DSGubo.init(this, &DSLglobal, {});
-        //DSCorner.init(this, &DSLoverlay, {TCorner.getViewAndSampler()});
         DSKey.init(this, &DSLoverlay, {TKey.getViewAndSampler()});
 
         SC.pipelinesAndDescriptorSetsInit();
@@ -274,7 +259,6 @@ protected:
         PMesh.cleanup();
         DSGubo.cleanup();
         POverlay.cleanup();
-        //DSCorner.cleanup();
         DSKey.cleanup();
         RP.cleanup();
 
@@ -283,8 +267,6 @@ protected:
     }
 
     void localCleanup() {
-       // TCorner.cleanup();
-        //MCorner.cleanup();
         TKey.cleanup();
         MKey.cleanup();
         DSLoverlay.cleanup();
@@ -308,11 +290,6 @@ protected:
         SC.populateCommandBuffer(cmdBuffer, 0, currentImage);     // draws all mesh instances
 
         POverlay.bind(cmdBuffer);
-        /*DSCorner.bind(cmdBuffer, POverlay, 0, currentImage);
-        MCorner.bind(cmdBuffer);
-        vkCmdDrawIndexed(cmdBuffer,
-        static_cast<uint32_t>(MCorner.indices.size()), 1, 0, 0, 0);
-*/
         DSKey.bind(cmdBuffer, POverlay, 0, currentImage);
         MKey.bind(cmdBuffer);
         vkCmdDrawIndexed(cmdBuffer,static_cast<uint32_t>(MKey.indices.size()), 1, 0, 0, 0);
@@ -423,10 +400,6 @@ protected:
             inst.DS[0][1]->map(currentImage, &l, 0);  // local
         }
 
-        // 7) Overlay
-        //CornerUBO.visible = 1.0f;
-        //DSCorner.map(currentImage, &CornerUBO, 0);
-
         KeyUBO.visible = showKeyOverlay ? 1.0f : 0.0f;
         DSKey.map(currentImage, &KeyUBO, 0);
     }
@@ -447,29 +420,33 @@ protected:
     void handleDelete() {
         // --- Hide current selection (K toggles) ---
         int kState = glfwGetKey(window, GLFW_KEY_D);
-        if (kState == GLFW_PRESS && prevDelState == GLFW_RELEASE) {
+        if (kState == GLFW_PRESS && prevDelState == GLFW_RELEASE && editMode) {
             if (selectedListPos >= 0 && selectedListPos < (int)selectableIds.size()) {
                 const std::string id = selectableIds[selectedListPos];
+                const bool wasVisible = (hiddenIds.count(id) == 0);
 
-                // Toggle visibility
-                if (hiddenIds.count(id) == 0) {
+                if (wasVisible) {
                     hiddenIds.insert(id);
-                    // Jump to None when hiding current
                     selectedListPos = -1;
                     selectedObjectIndex = -1;
-                    txt.print(-0.9f, -0.7f, "Currently editing: \nNone",
-                              4, "SS", false, true, true, TAL_LEFT, TRH_LEFT, TRV_TOP);
                 } else {
                     hiddenIds.erase(id);
-                    // Keep selection None; user can TAB to pick again
+                    // keep selection as None; user can TAB to choose again
                 }
 
-                // If L is held, refresh the visible list immediately
+                // Always refresh the "Currently editing" label
+                const std::string curr =
+                    (selectedListPos >= 0 && selectedListPos < (int)selectableIds.size())
+                    ? "Currently editing: \n" + selectableIds[selectedListPos]
+                    : "Currently editing: \nNone";
+                txt.print(-0.9f, -0.7f, curr,
+                          4, "SS", false, true, true, TAL_LEFT, TRH_LEFT, TRV_TOP);
+
+                // Refresh list only if L is currently held
                 if (glfwGetKey(window, GLFW_KEY_L) == GLFW_PRESS) {
                     txt.print(-0.9f, -0.27f, makeVisibleListString(),
                               3, "SS", false, true, true, TAL_LEFT, TRH_LEFT, TRV_TOP);
                 }
-
                 txt.updateCommandBuffer();
             }
         }
@@ -536,7 +513,6 @@ protected:
         if (glfwGetKey(window, GLFW_KEY_G) == GLFW_PRESS) inst.Wm = inst.Wm * glm::rotate(glm::mat4(1), -ROT*dt, glm::vec3(0,1,0));
 
         // --- SCALE uniformly in LOCAL space (post-multiply) ---
-
         float step = std::pow(SCL, dt * 5.0f);
 
         if (glfwGetKey(window, GLFW_KEY_S) == GLFW_PRESS) {
@@ -553,16 +529,16 @@ protected:
     void handleListDisplay() {
         int state = glfwGetKey(window, GLFW_KEY_L);
 
-        // L pressed -> show list (once on transition to avoid spamming)
-        if (state == GLFW_PRESS && prevLState == GLFW_RELEASE && !showKeyOverlay) {
+        // pressed -> show list
+        if (state == GLFW_PRESS && prevLState == GLFW_RELEASE) {
             txt.print(-0.9f, -0.27f, makeVisibleListString(),
                       3, "SS", false, true, true, TAL_LEFT, TRH_LEFT, TRV_TOP);
             txt.updateCommandBuffer();
         }
 
-        // L released -> restore hint
-        if (state == GLFW_RELEASE && prevLState == GLFW_PRESS && !showKeyOverlay) {
-            txt.print(-0.98f, -0.27f, "Hold L to see all furnitures",
+        // released -> show hint (do NOT touch the "Currently editing" line)
+        if (state == GLFW_RELEASE && prevLState == GLFW_PRESS) {
+            txt.print(-0.9f, -0.27f, "Press L to see all furnitures",
                       3, "SS", false, true, true, TAL_LEFT, TRH_LEFT, TRV_TOP);
             txt.updateCommandBuffer();
         }
@@ -571,47 +547,27 @@ protected:
     }
 
 
-
     void handleObjectSelection() {
-        // Rising-edge detection: fires once when TAB goes RELEASE -> PRESS
         int state = glfwGetKey(window, GLFW_KEY_TAB);
         if (state == GLFW_PRESS && prevTabState == GLFW_RELEASE) {
-            if (selectableIndices.empty()) {
+            if (selectableIndices.empty() || !selectNextVisible(+1)) {
+                selectedListPos = -1;
                 selectedObjectIndex = -1;
-                selectedListPos     = -1;
-                std::cout << "No selectable objects.\n";
-            } else {
-                // Start from current (or -1) and advance to next *visible* one
-                if (selectedListPos < 0) selectedListPos = -1; // force wrap from start
-                if (!selectNextVisible(+1)) {
-                    // none visible
-                    txt.print(-0.9f, -0.7f, "Currently editing: \nNone",
-                              4, "SS", false, true, true, TAL_LEFT, TRH_LEFT, TRV_TOP);
-                    txt.updateCommandBuffer();
-                    std::cout << "No visible objects.\n";
-                    prevTabState = state;
-                    return;
-                }
-
-                const std::string& label =
-                    (selectedListPos >= 0 && selectedListPos < (int)selectableIds.size())
-                    ? ("Currently editing: \n" + selectableIds[selectedListPos])
-                    : (std::string("instance_") + std::to_string(selectedObjectIndex));
-
-                txt.print(-0.9f, -0.7f, label, 4, "SS", false, true, true,
-                          TAL_LEFT, TRH_LEFT, TRV_TOP);
-                // If the list is currently visible, refresh it to reflect any changes
-                // If L is held, refresh list so any “current” cue or ordering changes show up
-                if (glfwGetKey(window, GLFW_KEY_L) == GLFW_PRESS) {
-                    txt.print(-0.9f, -0.27f, makeVisibleListString(),
-                              3, "SS", false, true, true, TAL_LEFT, TRH_LEFT, TRV_TOP);
-                    txt.updateCommandBuffer();
-                }
-
-
-                std::cout << "Selected object idx: " << selectedObjectIndex
-                          << "  id: " << label << "\n";
             }
+            const std::string curr =
+                (selectedListPos >= 0 && selectedListPos < (int)selectableIds.size())
+                ? "Currently editing: \n" + selectableIds[selectedListPos]
+                : "Currently editing: \nNone";
+
+            txt.print(-0.9f, -0.7f, curr,
+                      4, "SS", false, true, true, TAL_LEFT, TRH_LEFT, TRV_TOP);
+
+            // Optional: if L held, refresh the list content too
+            if (glfwGetKey(window, GLFW_KEY_L) == GLFW_PRESS) {
+                txt.print(-0.9f, -0.27f, makeVisibleListString(),
+                          3, "SS", false, true, true, TAL_LEFT, TRH_LEFT, TRV_TOP);
+            }
+            txt.updateCommandBuffer();
         }
         prevTabState = state;
     }
@@ -624,31 +580,26 @@ protected:
 
     std::string makeVisibleListString() const {
         std::string s;
-        for (size_t i = 0; i < selectableIds.size(); ++i) {
-            if (hiddenIds.count(selectableIds[i]) == 0) s += selectableIds[i] + "\n";
-        }
+        for (size_t i = 0; i < selectableIds.size(); ++i)
+            if (hiddenIds.count(selectableIds[i]) == 0)
+                s += selectableIds[i] + "\n";
         if (s.empty()) s = "(no visible objects)";
         return s;
     }
 
-
-    // Move selection to next/prev *visible* item. Returns true if found one.
+    // advance to next *visible* item; returns true if one found
     bool selectNextVisible(int step = +1) {
         if (selectableIndices.empty()) { selectedListPos = -1; selectedObjectIndex = -1; return false; }
         const int n = (int)selectableIndices.size();
         for (int k = 0; k < n; ++k) {
             selectedListPos = (selectedListPos + step + n) % n;
-            if (isVisibleAtListPos(selectedListPos)) {
+            if (hiddenIds.count(selectableIds[selectedListPos]) == 0) {
                 selectedObjectIndex = selectableIndices[selectedListPos];
                 return true;
             }
         }
-        // none visible
-        selectedListPos = -1;
-        selectedObjectIndex = -1;
-        return false;
+        selectedListPos = -1; selectedObjectIndex = -1; return false;
     }
-
 
 };
 
