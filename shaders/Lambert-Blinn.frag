@@ -31,9 +31,8 @@ void main() {
 	vec3 Norm = normalize(fragNorm);
 	vec3 EyeDir = normalize(gubo.eyePos - fragPos);
 
-	vec3 LightDir = gubo.lightPos - fragPos;
-	float LightDistance = length(LightDir);
-	LightDir = normalize(LightDir);
+	vec3 LightDir = normalize(gubo.lightPos - fragPos);
+	float LightDistance = length(gubo.lightPos - fragPos);
 
 	vec3 LightModel = gubo.lightColor.rgb * pow((gubo.g / LightDistance), gubo.decayFactor);
 

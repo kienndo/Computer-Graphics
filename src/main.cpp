@@ -137,7 +137,7 @@ protected:
 
         // set = 1 (local)
         DSLmesh.init(this, {
-          { 0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,         VK_SHADER_STAGE_VERTEX_BIT,
+          { 0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,         VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT,
             sizeof(LocalUBO), 1 },
           { 1, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT,
             0, 1 },
@@ -385,11 +385,11 @@ protected:
 
         // 5) Global UBO
         GlobalUBO g{};
-        g.lightPos   = glm::vec3(70,30,-40);
+        g.lightPos   = glm::vec3(0,35,-30);
         g.lightColor = glm::vec4(1,0.95,0.9,1);
         g.decayFactor = 1.0f;
-        g.g = 50.0f;
-        g.ambientLightColor = glm::vec3(0.2f, 0.19f, 0.18f);
+        g.g = 20.0f;
+        g.ambientLightColor = glm::vec3(0.1f, 0.095f, 0.09f);
         g.eyePos     = camPos;
 
         // 6) Per-instance locals
@@ -397,7 +397,7 @@ protected:
             auto &inst = SC.TI[0].I[i];
 
             LocalUBO l{};
-            l.gamma = 150.0f;
+            l.gamma = 120.0f;
             l.specularColor = glm::vec3(1.0f, 0.95f, 0.9f);
             l.mMat   = inst.Wm;
             l.nMat   = glm::inverse(glm::transpose(l.mMat));
