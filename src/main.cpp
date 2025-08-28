@@ -530,14 +530,14 @@ protected:
         int state = glfwGetKey(window, GLFW_KEY_L);
 
         // pressed -> show list
-        if (state == GLFW_PRESS && prevLState == GLFW_RELEASE) {
+        if (state == GLFW_PRESS && prevLState == GLFW_RELEASE && !showKeyOverlay) {
             txt.print(-0.9f, -0.27f, makeVisibleListString(),
                       3, "SS", false, true, true, TAL_LEFT, TRH_LEFT, TRV_TOP);
             txt.updateCommandBuffer();
         }
 
         // released -> show hint (do NOT touch the "Currently editing" line)
-        if (state == GLFW_RELEASE && prevLState == GLFW_PRESS) {
+        if (state == GLFW_RELEASE && prevLState == GLFW_PRESS && !showKeyOverlay) {
             txt.print(-0.9f, -0.27f, "Press L to see all furnitures",
                       3, "SS", false, true, true, TAL_LEFT, TRH_LEFT, TRV_TOP);
             txt.updateCommandBuffer();
