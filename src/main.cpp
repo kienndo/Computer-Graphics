@@ -60,26 +60,26 @@ protected:
 
     // Delete
     std::unordered_set<std::string> hiddenIds;
-    int prevDelState = GLFW_RELEASE;    // rising edge for K
+    int prevDelState = GLFW_RELEASE;  // rising edge for K
 
-    // --- Mode switch state ---
-    bool editMode = false;                 // false = Camera mode, true = Edit mode
-    int  prevQState = GLFW_RELEASE;        // rising-edge detection for 'Q'
+    // Mode switch state
+    bool editMode = false;  // false = Camera mode, true = Edit mode
+    int  prevQState = GLFW_RELEASE;  // rising-edge detection for 'Q'
 
-    // --- Keyboard info ---
+    // Keyboard info
     bool showKeyOverlay = true;
     int  prevPlusState  = GLFW_RELEASE;
 
-    // --- Show List ---
+    // Object List
     bool showList = true;
     int  prevLState = GLFW_RELEASE;
 
     OverlayUniformBuffer KeyUBO{};  // default visible = 0.0f
 
-    std::vector<int> selectableIndices;     // instance indices you can select
-    std::vector<std::string> selectableIds; // their human-readable IDs from JSON (optional UI)
-    int  selectedObjectIndex = -1;   // real instance index into SC.TI[0].I[...]
-    int  selectedListPos     = -1;   // position inside selectableIndices
+    std::vector<int> selectableIndices;  // instance indices you can select
+    std::vector<std::string> selectableIds;  // their human-readable IDs from JSON (optional UI)
+    int  selectedObjectIndex = -1;  // real instance index into SC.TI[0].I[...]
+    int  selectedListPos     = -1;  // position inside selectableIndices
 
     RenderPass RP;
     DescriptorSetLayout DSLglobal, DSLmesh, DSLoverlay;
@@ -98,22 +98,12 @@ protected:
 
     TextMaker txt;
 
-    // --- Camera (simple fixed cam) ---
+    // Camera
     glm::vec3 camPos{0.0f, 40.0f, 6.0f};
     float     camYaw   = 0.0f;
     float     camPitch = -0.5f;
     glm::vec3 camFwd{0,0,-1}, camRight{1,0,0}, camUp{0,1,0};
 
-    // --- Object transform state (controlled by keyboard) ---
-    glm::vec3 objPos   {0.0f, 0.0f, 0.0f};
-    float     objYaw   = 0.0f; // around Y
-    float     objPitch = 0.0f; // around X
-    float     objRoll  = 0.0f; // around Z
-    float     objScale = 0.01f;
-
-    // Speeds
-    float MOVE_SPEED = 20.0f;
-    float ROT_SPEED  = glm::radians(90.0f);
 
     void setWindowParameters() {
         windowWidth = 1280;
@@ -130,27 +120,28 @@ protected:
     }
 
     void localInit() override {
-
         // set = 0 (global)
         DSLglobal.init(this, {
-          { 0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, VK_SHADER_STAGE_ALL_GRAPHICS,
-            sizeof(GlobalUBO), 1 }
+            { 0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, VK_SHADER_STAGE_ALL_GRAPHICS,
+                sizeof(GlobalUBO), 1}
         });
 
         // set = 1 (local)
         DSLmesh.init(this, {
-          { 0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,         VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT,
+            { 0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT,
             sizeof(LocalUBO), 1 },
-          { 1, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT,
+            { 1, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT,
             0, 1 },
-          { 2, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT,
+            { 2, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT,
             1, 1 }
         });
 
         DSLoverlay.init(this, {
-                 {0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, VK_SHADER_STAGE_ALL_GRAPHICS, sizeof(OverlayUniformBuffer), 1},
-                 {1, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT, 0, 1}
-              });
+            {0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, VK_SHADER_STAGE_ALL_GRAPHICS,
+                sizeof(OverlayUniformBuffer), 1},
+            {1, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT,
+                0, 1}
+        });
 
         VDsimp.init(this,
         { {0, sizeof(VertexSimp), VK_VERTEX_INPUT_RATE_VERTEX} },
@@ -158,22 +149,20 @@ protected:
             {0, 0, VK_FORMAT_R32G32B32_SFLOAT, offsetof(VertexSimp,pos),  sizeof(glm::vec3), POSITION},
             {0, 1, VK_FORMAT_R32G32B32_SFLOAT, offsetof(VertexSimp,norm), sizeof(glm::vec3), NORMAL},
             {0, 2, VK_FORMAT_R32G32_SFLOAT,    offsetof(VertexSimp,UV),   sizeof(glm::vec2), UV}
-        }
-        );
+        });
 
         VDoverlay.init(this, {
-                  {0, sizeof(VertexOverlay), VK_VERTEX_INPUT_RATE_VERTEX}
-                }, {
-                  {0, 0, VK_FORMAT_R32G32_SFLOAT, offsetof(VertexOverlay, pos),
-                         sizeof(glm::vec2), OTHER},
-                  {0, 1, VK_FORMAT_R32G32_SFLOAT, offsetof(VertexOverlay, UV),
-                         sizeof(glm::vec2), UV}
-                });
+            {0, sizeof(VertexOverlay), VK_VERTEX_INPUT_RATE_VERTEX}},
+            {{0, 0, VK_FORMAT_R32G32_SFLOAT, offsetof(VertexOverlay, pos),
+                    sizeof(glm::vec2), OTHER},
+                {0, 1, VK_FORMAT_R32G32_SFLOAT, offsetof(VertexOverlay, UV),
+                    sizeof(glm::vec2), UV}
+            });
 
         POverlay.init(this, &VDoverlay,
-              "shaders/Overlay.vert.spv",
-              "shaders/Overlay.frag.spv",
-              { &DSLoverlay });
+            "shaders/Overlay.vert.spv",
+            "shaders/Overlay.frag.spv",
+            {&DSLoverlay});
 
         POverlay.setCompareOp(VK_COMPARE_OP_LESS_OR_EQUAL);
         POverlay.setCullMode(VK_CULL_MODE_NONE);
@@ -186,12 +175,12 @@ protected:
         RP.properties[0].clearValue = {0.05f, 0.05f, 0.08f, 1.0f};
 
         PMesh.init(this, &VDsimp,
-        "shaders/Mesh.vert.spv",
-        "shaders/Lambert-Blinn.frag.spv",{ &DSLglobal, &DSLmesh });
+            "shaders/Mesh.vert.spv",
+            "shaders/Lambert-Blinn.frag.spv",
+        { &DSLglobal, &DSLmesh });
         PMesh.setCullMode(VK_CULL_MODE_NONE);
         PMesh.setPolygonMode(VK_POLYGON_MODE_FILL);
         PMesh.setCompareOp(VK_COMPARE_OP_LESS_OR_EQUAL);
-
 
         PRs.resize(1);
         PRs[0].init("Mesh", {
@@ -225,14 +214,11 @@ protected:
 
         // Add a tiny dummy
         txt.print(-0.95f, -0.95f, ("CAM MODE"), 2, "SS");
-        txt.print(-0.95f, -0.85f, "Currently editing: \nNone",
-              4,
-              "SS",
-              false, true, true,
-              TAL_LEFT, TRH_LEFT, TRV_TOP);
-        txt.print(-0.95f, -0.75, (""), 1, "SS", false, true, true, TAL_LEFT, TRH_LEFT, TRV_TOP);
+        txt.print(-0.95f, -0.85f, "Currently editing: \nNone", 4, "SS", false,
+                true, true, TAL_LEFT, TRH_LEFT, TRV_TOP);
+        txt.print(-0.95f, -0.75, (""), 1, "SS", false, true,
+                    true, TAL_LEFT, TRH_LEFT, TRV_TOP);
         txt.updateCommandBuffer();
-
 
         std::cout << "\nLoading the scene\n\n";
         SC.init(this, 1, VDRs, PRs, "assets/models/scene.json");
@@ -254,7 +240,6 @@ protected:
     }
 
     void pipelinesAndDescriptorSetsCleanup() override {
-
         PMesh.cleanup();
         DSGubo.cleanup();
         POverlay.cleanup();
@@ -284,13 +269,14 @@ protected:
         RP.begin(cmdBuffer, currentImage);
 
         PMesh.bind(cmdBuffer);
-        DSGubo.bind(cmdBuffer, PMesh, 0, currentImage);           // set=0 for scene
-        SC.populateCommandBuffer(cmdBuffer, 0, currentImage);     // draws all mesh instances
+        DSGubo.bind(cmdBuffer, PMesh, 0, currentImage);  // set = 0 for scene
+        SC.populateCommandBuffer(cmdBuffer, 0, currentImage);  // draws all mesh instances
 
         POverlay.bind(cmdBuffer);
         DSKey.bind(cmdBuffer, POverlay, 0, currentImage);
         MKey.bind(cmdBuffer);
-        vkCmdDrawIndexed(cmdBuffer,static_cast<uint32_t>(MKey.indices.size()), 1, 0, 0, 0);
+        vkCmdDrawIndexed(cmdBuffer,static_cast<uint32_t>(MKey.indices.size()), 1,
+                        0, 0, 0);
 
         RP.end(cmdBuffer);
     }
@@ -303,12 +289,11 @@ protected:
         const float MOVE_SPEED      = fire ? MOVE_SPEED_RUN : MOVE_SPEED_BASE;
 
         if (!editMode) {
-            // --- CAMERA MODE ---
+            // CAMERA MODE
             camYaw   -= r.y * ROT_SPEED * dt;
             camPitch -= r.x * ROT_SPEED * dt;
             camPitch  = glm::clamp(camPitch, glm::radians(-89.0f), glm::radians(89.0f));
 
-            // R = Ry * Rx
             glm::mat4 Ry = glm::rotate(glm::mat4(1), camYaw,   glm::vec3(0,1,0));
             glm::mat4 Rx = glm::rotate(glm::mat4(1), camPitch, glm::vec3(1,0,0));
             glm::mat4 R  = Ry * Rx;
@@ -321,13 +306,12 @@ protected:
             camPos += camUp    * (m.y * MOVE_SPEED * dt);
             camPos -= camFwd   * (m.z * MOVE_SPEED * dt);
         } else {
-            // --- EDIT MODE ---
+            // EDIT MODE
             manipulateSelected(dt, fire);
         }
     }
 
     void updateUniformBuffer(uint32_t currentImage) {
-
         if (glfwGetKey(window, GLFW_KEY_ESCAPE)) glfwSetWindowShouldClose(window, GL_TRUE);
 
         float dt = 0.0f;
@@ -381,14 +365,15 @@ protected:
             l.mMat   = inst.Wm;
             l.nMat   = glm::inverse(glm::transpose(l.mMat));
             l.mvpMat = Prj * View * l.mMat;
-            const std::string& iid = *inst.id;                   // instance's string id
+
+            const std::string& iid = *inst.id;  // instance's string id
             float visible = (hiddenIds.count(iid) ? 0.0f : 1.0f);
 
             l.highlight = glm::vec4(
-                (i == selectedObjectIndex) ? 1.0f : 0.0f,        // x: highlighted selection
+                (i == selectedObjectIndex) ? 1.0f : 0.0f,  // x: highlighted selection
                 0.0f,
                 0.0f,
-                visible                                           // w: visibility flag (1=show, 0=hide)
+                visible  // w: visibility flag (1=show, 0=hide)
             );
 
             inst.DS[0][0]->map(currentImage, &g, 0);  // global
@@ -400,21 +385,24 @@ protected:
     }
 
     void handleKeyboardOverlay() {
-
         int state = glfwGetKey(window, GLFW_KEY_P);
+
         if (state == GLFW_PRESS && prevPlusState == GLFW_RELEASE) {
             showKeyOverlay = !showKeyOverlay;
-            txt.print(-0.95f, -0.7, (showKeyOverlay ? "" : "Hold L to see all furnitures"),
-                      3, "SS", false, true, true, TAL_LEFT, TRH_LEFT, TRV_TOP);
-            txt.print(-0.95f, -0.75, (showKeyOverlay ? "" : "Press P to show keyboard actions"), 1, "SS", false, true, true, TAL_LEFT, TRH_LEFT, TRV_TOP);
+            txt.print(-0.95f, -0.7, (showKeyOverlay ? "" : "Hold L to see all furnitures"), 3,
+                "SS", false, true, true, TAL_LEFT, TRH_LEFT, TRV_TOP);
+            txt.print(-0.95f, -0.75, (showKeyOverlay ? "" : "Press P to show keyboard actions"), 1,
+                "SS", false, true, true, TAL_LEFT, TRH_LEFT, TRV_TOP);
             txt.updateCommandBuffer();
         }
+
         prevPlusState = state;
     }
 
     void handleDelete() {
-        // --- Hide current selection (K toggles) ---
+        // Hide current selection (K toggles)
         int kState = glfwGetKey(window, GLFW_KEY_D);
+
         if (kState == GLFW_PRESS && prevDelState == GLFW_RELEASE && editMode) {
             if (selectedListPos >= 0 && selectedListPos < (int)selectableIds.size()) {
                 const std::string id = selectableIds[selectedListPos];
@@ -434,28 +422,33 @@ protected:
                     (selectedListPos >= 0 && selectedListPos < (int)selectableIds.size())
                     ? "Currently editing: \n" + selectableIds[selectedListPos]
                     : "Currently editing: \nNone";
-                txt.print(-0.95f, -0.85f, curr,
-                          4, "SS", false, true, true, TAL_LEFT, TRH_LEFT, TRV_TOP);
+
+                txt.print(-0.95f, -0.85f, curr, 4, "SS", false,
+                    true, true, TAL_LEFT, TRH_LEFT, TRV_TOP);
 
                 // Refresh list only if L is currently held
                 if (glfwGetKey(window, GLFW_KEY_L) == GLFW_PRESS) {
-                    txt.print(-0.95f, -0.7f, makeVisibleListString(),
-                              3, "SS", false, true, true, TAL_LEFT, TRH_LEFT, TRV_TOP);
+                    txt.print(-0.95f, -0.7f, makeVisibleListString(), 3, "SS",
+                        false, true, true, TAL_LEFT, TRH_LEFT, TRV_TOP);
                 }
+
                 txt.updateCommandBuffer();
             }
         }
+
         prevDelState = kState;
     }
 
     void handleModeToggle() {
         int s = glfwGetKey(window, GLFW_KEY_Q);
+
         if (s == GLFW_PRESS && prevQState == GLFW_RELEASE) {
             editMode = !editMode;
             std::cout << (editMode ? "[MODE] Edit\n" : "[MODE] Camera\n");
             txt.print(-0.95f, -0.95f, (editMode ? "EDIT MODE" : "CAM MODE"), 2, "SS");
             txt.updateCommandBuffer();
         }
+
         prevQState = s;
     }
 
@@ -464,15 +457,15 @@ protected:
 
         // pressed -> show list
         if (state == GLFW_PRESS && prevLState == GLFW_RELEASE && !showKeyOverlay) {
-            txt.print(-0.95f, -0.7f, makeVisibleListString(),
-                      3, "SS", false, true, true, TAL_LEFT, TRH_LEFT, TRV_TOP);
+            txt.print(-0.95f, -0.7f, makeVisibleListString(), 3, "SS",
+                false, true, true, TAL_LEFT, TRH_LEFT, TRV_TOP);
             txt.updateCommandBuffer();
         }
 
         // released -> show hint (do NOT touch the "Currently editing" line)
         if (state == GLFW_RELEASE && prevLState == GLFW_PRESS && !showKeyOverlay) {
-            txt.print(-0.95f, -0.7f, "Press L to see all furnitures",
-                      3, "SS", false, true, true, TAL_LEFT, TRH_LEFT, TRV_TOP);
+            txt.print(-0.95f, -0.7f, "Press L to see all furnitures", 3, "SS",
+                false, true, true, TAL_LEFT, TRH_LEFT, TRV_TOP);
             txt.updateCommandBuffer();
         }
 
@@ -481,26 +474,30 @@ protected:
 
     void handleObjectSelection() {
         int state = glfwGetKey(window, GLFW_KEY_TAB);
+
         if (state == GLFW_PRESS && prevTabState == GLFW_RELEASE) {
             if (selectableIndices.empty() || !selectNextVisible(+1)) {
                 selectedListPos = -1;
                 selectedObjectIndex = -1;
             }
+
             const std::string curr =
                 (selectedListPos >= 0 && selectedListPos < (int)selectableIds.size())
                 ? "Currently editing: \n" + selectableIds[selectedListPos]
                 : "Currently editing: \nNone";
 
-            txt.print(-0.95f, -0.85f, curr,
-                      4, "SS", false, true, true, TAL_LEFT, TRH_LEFT, TRV_TOP);
+            txt.print(-0.95f, -0.85f, curr, 4, "SS", false,
+                        true, true, TAL_LEFT, TRH_LEFT, TRV_TOP);
 
             // Optional: if L held, refresh the list content too
             if (glfwGetKey(window, GLFW_KEY_L) == GLFW_PRESS) {
-                txt.print(-0.95f, -0.7f, makeVisibleListString(),
-                          3, "SS", false, true, true, TAL_LEFT, TRH_LEFT, TRV_TOP);
+                txt.print(-0.95f, -0.7f, makeVisibleListString(), 3, "SS",
+                    false, true, true, TAL_LEFT, TRH_LEFT, TRV_TOP);
             }
+
             txt.updateCommandBuffer();
         }
+
         prevTabState = state;
     }
 
@@ -510,69 +507,86 @@ protected:
     }
 
     void buildSelectableFromJSON(const char* path) {
-            std::ifstream f(path);
-            if (!f) return;
-            nlohmann::json j; f >> j;
+        std::ifstream f(path);
+        if (!f) return;
+        nlohmann::json j; f >> j;
 
-            auto& instBlocks = j["instances"];
-            if (!instBlocks.is_array() || instBlocks.empty()) return;
+        auto& instBlocks = j["instances"];
+        if (!instBlocks.is_array() || instBlocks.empty()) return;
 
-            auto& elements = instBlocks[0]["elements"];
-            if (!elements.is_array()) return;
+        auto& elements = instBlocks[0]["elements"];
+        if (!elements.is_array()) return;
 
-            // Denylist / rules for unselectables (floor, wall, etc.)
-            auto isUnselectable = [](const std::string& id){
-                std::string s = id;
-                std::transform(s.begin(), s.end(), s.begin(), ::tolower);
-                return (s == "floor" || s == "wall" || s =="door" || s == "window");
-            };
+        // Denylist / rules for unselectables (floor, wall, etc.)
+        auto isUnselectable = [](const std::string& id){
+            std::string s = id;
+            std::transform(s.begin(), s.end(), s.begin(), ::tolower);
+            return (s == "floor" || s == "wall" || s =="door" || s == "window");
+        };
 
-            selectableIndices.clear();
-            selectableIds.clear();
+        selectableIndices.clear();
+        selectableIds.clear();
 
-            // elements order == Scene instance order
-            for (int i = 0; i < (int)elements.size(); ++i) {
-                std::string id = elements[i].value("id", std::string{});
-                if (id.empty() || !isUnselectable(id)) {
-                    selectableIndices.push_back(i);       // keep instance index
-                    selectableIds.push_back(id.empty() ? ("instance_" + std::to_string(i)) : id);
-                }
+        // elements order == Scene instance order
+        for (int i = 0; i < (int)elements.size(); ++i) {
+            std::string id = elements[i].value("id", std::string{});
+
+            if (id.empty() || !isUnselectable(id)) {
+                selectableIndices.push_back(i);  // keep instance index
+                selectableIds.push_back(id.empty() ? ("instance_" + std::to_string(i)) : id);
             }
+        }
     }
 
     void manipulateSelected(float dt, bool fire) {
-        if (selectedObjectIndex < 0) return;              // nothing selected
+        if (selectedObjectIndex < 0) return;  // nothing selected
 
-        const float MOVE = (fire ? 50.0f : 15.0f);        // units/sec
-        const float ROT  = glm::radians(fire ? 180.0f : 90.0f); // rad/sec
-        const float SCL  = (fire ? 1.5f : 1.2f);          // scale step multiplier
+        const float MOVE = (fire ? 50.0f : 15.0f);  // units/sec
+        const float ROT = glm::radians(fire ? 180.0f : 90.0f);  // rad/sec
+        const float SCL = (fire ? 1.5f : 1.2f);  // scale step multiplier
 
         auto &inst = SC.TI[0].I[selectedObjectIndex];
 
-        // --- TRANSLATE in WORLD space (pre-multiply) ---
+        // TRANSLATE in WORLD space (pre-multiply)
         // Arrows: X/Z, PageUp/PageDown: Y
-        if (glfwGetKey(window, GLFW_KEY_LEFT)  == GLFW_PRESS) inst.Wm = glm::translate(glm::mat4(1), glm::vec3(-MOVE*dt, 0,        0)) * inst.Wm;
-        if (glfwGetKey(window, GLFW_KEY_RIGHT) == GLFW_PRESS) inst.Wm = glm::translate(glm::mat4(1), glm::vec3( MOVE*dt, 0,        0)) * inst.Wm;
-        if (glfwGetKey(window, GLFW_KEY_UP)    == GLFW_PRESS) inst.Wm = glm::translate(glm::mat4(1), glm::vec3( 0,        0, -MOVE*dt)) * inst.Wm;
-        if (glfwGetKey(window, GLFW_KEY_DOWN)  == GLFW_PRESS) inst.Wm = glm::translate(glm::mat4(1), glm::vec3( 0,        0,  MOVE*dt)) * inst.Wm;
-        if (glfwGetKey(window, GLFW_KEY_PAGE_UP)   == GLFW_PRESS) inst.Wm = glm::translate(glm::mat4(1), glm::vec3( 0,  MOVE*dt, 0)) * inst.Wm;
-        if (glfwGetKey(window, GLFW_KEY_PAGE_DOWN) == GLFW_PRESS) inst.Wm = glm::translate(glm::mat4(1), glm::vec3( 0, -MOVE*dt, 0)) * inst.Wm;
+        if (glfwGetKey(window, GLFW_KEY_LEFT) == GLFW_PRESS) {
+            inst.Wm = glm::translate(glm::mat4(1), glm::vec3(-MOVE*dt, 0, 0)) * inst.Wm;
+        }
+        if (glfwGetKey(window, GLFW_KEY_RIGHT) == GLFW_PRESS) {
+            inst.Wm = glm::translate(glm::mat4(1), glm::vec3(MOVE*dt, 0, 0)) * inst.Wm;
+        }
+        if (glfwGetKey(window, GLFW_KEY_UP) == GLFW_PRESS) {
+            inst.Wm = glm::translate(glm::mat4(1), glm::vec3(0, 0, -MOVE*dt)) * inst.Wm;
+        }
+        if (glfwGetKey(window, GLFW_KEY_DOWN) == GLFW_PRESS) {
+            inst.Wm = glm::translate(glm::mat4(1), glm::vec3(0, 0, MOVE*dt)) * inst.Wm;
+        }
+        if (glfwGetKey(window, GLFW_KEY_PAGE_UP) == GLFW_PRESS) {
+            inst.Wm = glm::translate(glm::mat4(1), glm::vec3(0, MOVE*dt, 0)) * inst.Wm;
+        }
+        if (glfwGetKey(window, GLFW_KEY_PAGE_DOWN) == GLFW_PRESS) {
+            inst.Wm = glm::translate(glm::mat4(1), glm::vec3(0, -MOVE*dt, 0)) * inst.Wm;
+        }
 
-        // --- ROTATE about Y-axis ---
-        if (glfwGetKey(window, GLFW_KEY_T) == GLFW_PRESS) inst.Wm = inst.Wm * glm::rotate(glm::mat4(1),  ROT*dt, glm::vec3(0,1,0));
-        if (glfwGetKey(window, GLFW_KEY_G) == GLFW_PRESS) inst.Wm = inst.Wm * glm::rotate(glm::mat4(1), -ROT*dt, glm::vec3(0,1,0));
+        // ROTATE about Y-axis
+        if (glfwGetKey(window, GLFW_KEY_T) == GLFW_PRESS) {
+            inst.Wm = inst.Wm * glm::rotate(glm::mat4(1), ROT*dt, glm::vec3(0,1,0));
+        }
+        if (glfwGetKey(window, GLFW_KEY_G) == GLFW_PRESS) {
+            inst.Wm = inst.Wm * glm::rotate(glm::mat4(1), -ROT*dt, glm::vec3(0,1,0));
+        }
 
-        // --- SCALE uniformly in LOCAL space (post-multiply) ---
+        // SCALE uniformly in LOCAL space (post-multiply)
         float step = std::pow(SCL, dt * 5.0f);
 
         if (glfwGetKey(window, GLFW_KEY_S) == GLFW_PRESS) {
             // shrink
             inst.Wm = inst.Wm * glm::scale(glm::mat4(1.0f), glm::vec3(1.0f / step));
         }
+
         if (glfwGetKey(window, GLFW_KEY_W) == GLFW_PRESS) {
             // grow
             inst.Wm = inst.Wm * glm::scale(glm::mat4(1.0f), glm::vec3(step));
-
         }
     }
 
@@ -583,34 +597,50 @@ protected:
 
     std::string makeVisibleListString() const {
         std::string s;
-        for (size_t i = 0; i < selectableIds.size(); ++i)
-            if (hiddenIds.count(selectableIds[i]) == 0)
+
+        for (size_t i = 0; i < selectableIds.size(); ++i) {
+            if (hiddenIds.count(selectableIds[i]) == 0) {
                 s += selectableIds[i] + "\n";
-        if (s.empty()) s = "(no visible objects)";
+            }
+        }
+
+
+        if (s.empty()) {
+            s = "(no visible objects)";
+        }
+
         return s;
     }
 
     bool selectNextVisible(int step = +1) {
-        if (selectableIndices.empty()) { selectedListPos = -1; selectedObjectIndex = -1; return false; }
+        if (selectableIndices.empty()){
+            selectedListPos = -1; selectedObjectIndex = -1; return false;
+        }
+
         const int n = (int)selectableIndices.size();
+
         for (int k = 0; k < n; ++k) {
             selectedListPos = (selectedListPos + step + n) % n;
+
             if (hiddenIds.count(selectableIds[selectedListPos]) == 0) {
                 selectedObjectIndex = selectableIndices[selectedListPos];
                 return true;
             }
         }
+
         selectedListPos = -1; selectedObjectIndex = -1; return false;
     }
 };
 
 int main() {
-
     CG_hospital app;
-    try { app.run(); }
-    catch (const std::exception& e) {
-        std::cerr << e.what() << std::endl;
-        return EXIT_FAILURE; }
-    return EXIT_SUCCESS;
 
+    try {
+        app.run();
+    } catch (const std::exception& e) {
+        std::cerr << e.what() << std::endl;
+        return EXIT_FAILURE;
+    }
+
+    return EXIT_SUCCESS;
 }

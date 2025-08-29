@@ -29,13 +29,9 @@
     </configurations>
   </component>
   <component name="ChangeListManager">
-    <list default="true" id="72edde42-13d2-4df3-b1df-094f5281efff" name="Changes" comment="Added 4 point lights and it works">
-      <change beforePath="$PROJECT_DIR$/.idea/shelf/Uncommitted_changes_before_Update_at_21_08_2025,_17_49_[Changes]/M_Wall_01.mgcg" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/.idea/shelf/Uncommitted_changes_before_Update_at_21_08_2025,_17_49_[Changes]/shelved.patch" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/.idea/shelf/Uncommitted_changes_before_Update_at_21_08_2025__17_49__Changes_.xml" beforeDir="false" />
+    <list default="true" id="72edde42-13d2-4df3-b1df-094f5281efff" name="Changes" comment="8 polint lights finished and extended far plane to see the whole hospital">
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/shaders/Lambert-Blinn.frag" beforeDir="false" afterPath="$PROJECT_DIR$/shaders/Lambert-Blinn.frag" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/shaders/Lambert-Blinn.frag.spv" beforeDir="false" afterPath="$PROJECT_DIR$/shaders/Lambert-Blinn.frag.spv" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/shaders/Mesh.frag" beforeDir="false" afterPath="$PROJECT_DIR$/shaders/Mesh.frag" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/src/main.cpp" beforeDir="false" afterPath="$PROJECT_DIR$/src/main.cpp" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
@@ -63,6 +59,7 @@
   }
 }</component>
   <component name="HighlightingSettingsPerFile">
+    <setting file="mock://C:/Users/julie/CLionProjects/CG_hospital/src/main.cpp" root0="SKIP_HIGHLIGHTING" />
     <setting file="mock://C:/Users/julie/CLionProjects/CG_hospital/src/main.cpp" root0="SKIP_HIGHLIGHTING" />
     <setting file="mock://C:/Users/julie/CLionProjects/CG_hospital/src/main.cpp" root0="SKIP_HIGHLIGHTING" />
     <setting file="mock://C:/Users/julie/CLionProjects/CG_hospital/src/main.cpp" root0="SKIP_HIGHLIGHTING" />
@@ -151,7 +148,7 @@
       <workItem from="1755707332338" duration="9875000" />
       <workItem from="1755774526039" duration="20934000" />
       <workItem from="1755961050222" duration="478000" />
-      <workItem from="1756369463695" duration="18499000" />
+      <workItem from="1756369463695" duration="23310000" />
     </task>
     <task id="LOCAL−00001" summary="one aircondition through scene.json works">
       <option name="closed" value="true" />
@@ -192,7 +189,15 @@
       <option name="project" value="LOCAL" />
       <updated>1756397310439</updated>
     </task>
-    <option name="localTasksCounter" value="6" />
+    <task id="LOCAL-00006" summary="8 polint lights finished and extended far plane to see the whole hospital">
+      <option name="closed" value="true" />
+      <created>1756465186253</created>
+      <option name="number" value="00006" />
+      <option name="presentableId" value="LOCAL-00006" />
+      <option name="project" value="LOCAL" />
+      <updated>1756465186253</updated>
+    </task>
+    <option name="localTasksCounter" value="7" />
     <servers />
   </component>
   <component name="TypeScriptGeneratedFilesManager">
@@ -224,6 +229,7 @@
     <MESSAGE value="Removed unused objects from scene.json" />
     <MESSAGE value="Shader works good now with one point light" />
     <MESSAGE value="Added 4 point lights and it works" />
-    <option name="LAST_COMMIT_MESSAGE" value="Added 4 point lights and it works" />
+    <MESSAGE value="8 polint lights finished and extended far plane to see the whole hospital" />
+    <option name="LAST_COMMIT_MESSAGE" value="8 polint lights finished and extended far plane to see the whole hospital" />
   </component>
 </project>
