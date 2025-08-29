@@ -23,7 +23,7 @@ struct VertexSimp {
 };
 
 struct GlobalUBO {
-    alignas(16) glm::vec4 lightPos[4];
+    alignas(16) glm::vec4 lightPos[8];
     alignas(16) glm::vec4 lightColor;
     alignas(4) glm::float32 decayFactor;
     alignas(4) glm::float32 g;
@@ -345,27 +345,31 @@ protected:
         updateFromInput(dt, m, r, fire);
 
         float Ar = float(windowWidth) / float(windowHeight);
-        glm::mat4 Prj = glm::perspective(glm::radians(60.0f), Ar, 0.01f, 200.0f);
+        glm::mat4 Prj = glm::perspective(glm::radians(60.0f), Ar, 0.01f, 270.0f);
         Prj[1][1] *= -1.0f;
 
         glm::mat4 View = glm::lookAt(camPos, camPos + camFwd, glm::vec3(0,1,0));
 
-        glm::vec4 LightPos[4] = {
-            glm::vec4(70, 35, -30, 1),
-            glm::vec4(10, 35, -30, 1),
-            glm::vec4(-60, 35, -20, 1),
-            glm::vec4(10, 35, 20, 1)
+        glm::vec4 LightPos[8] = {
+            glm::vec4(75, 35, -40, 1),
+            glm::vec4(-15, 35, 0, 1),
+            glm::vec4(-67, 35, -10, 1),
+            glm::vec4(-15, 35, 50, 1),
+            glm::vec4(-15, 35, -50, 1),
+            glm::vec4(-15, 35, 100, 1),
+            glm::vec4(-67, 35, 85, 1),
+            glm::vec4(75, 35, -5, 1)
         };
 
         GlobalUBO g{};
-        for (int i = 0; i < 4; i++) {
+        for (int i = 0; i < 8; i++) {
             g.lightPos[i] = LightPos[i];
         }
         g.lightColor = glm::vec4(1,0.95,0.9,1);
         g.decayFactor = 1.0f;
-        g.g = 20.0f;
-        g.numLights = 4;
-        g.ambientLightColor = glm::vec3(0.1f, 0.095f, 0.09f);
+        g.g = 5.0f;
+        g.numLights = 8;
+        g.ambientLightColor = glm::vec3(0.2f, 0.19f, 0.18f);
         g.eyePos     = camPos;
 
         for (int i = 0; i < SC.TI[0].InstanceCount; ++i) {
