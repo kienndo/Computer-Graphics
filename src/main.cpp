@@ -335,13 +335,13 @@ protected:
         glm::mat4 View = glm::lookAt(camPos, camPos + camFwd, glm::vec3(0,1,0));
 
         glm::vec4 LightPos[8] = {
-            glm::vec4(75, 35, -40, 1),
-            glm::vec4(-15, 35, 0, 1),
-            glm::vec4(-67, 35, -10, 1),
-            glm::vec4(-15, 35, 50, 1),
             glm::vec4(-15, 35, -50, 1),
+            glm::vec4(-15, 35, 0, 1),
+            glm::vec4(-15, 35, 50, 1),
             glm::vec4(-15, 35, 100, 1),
+            glm::vec4(-67, 35, -10, 1),
             glm::vec4(-67, 35, 85, 1),
+            glm::vec4(75, 35, -40, 1),
             glm::vec4(75, 35, -5, 1)
         };
 
