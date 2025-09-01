@@ -55,39 +55,39 @@ protected:
     float Ar = 4.0f/3.0f;
 
     // Iterate through assets
-    bool tabPressed          = false;
+    bool tabPressed = false;
     int prevTabState = GLFW_RELEASE;
 
-    // Delete
+    // Delete assets
     std::unordered_set<std::string> hiddenIds;
-    int prevDelState = GLFW_RELEASE;  // rising edge for K
+    int prevDelState = GLFW_RELEASE;
 
-    // Mode switch state
-    bool editMode = false;  // false = Camera mode, true = Edit mode
-    int  prevQState = GLFW_RELEASE;  // rising-edge detection for 'Q'
+    // Mode switch state, false = Camera mode, true = Edit mode
+    bool editMode = false;
+    int  prevQState = GLFW_RELEASE;
 
     // Keyboard info
     bool showKeyOverlay = true;
     int  prevPlusState  = GLFW_RELEASE;
 
-    // Object List
+    // List of assets
     bool showList = true;
     int  prevLState = GLFW_RELEASE;
 
-    OverlayUniformBuffer KeyUBO{};  // default visible = 0.0f
+    OverlayUniformBuffer KeyUBO{};
 
-    std::vector<int> selectableIndices;  // instance indices you can select
-    std::vector<std::string> selectableIds;  // their human-readable IDs from JSON (optional UI)
-    int  selectedObjectIndex = -1;  // real instance index into SC.TI[0].I[...]
-    int  selectedListPos     = -1;  // position inside selectableIndices
+    std::vector<int> selectableIndices;  // Assets
+    std::vector<std::string> selectableIds;  // Name of the assets
+    int  selectedObjectIndex = -1;
+    int  selectedListPos     = -1;
 
     RenderPass RP;
     DescriptorSetLayout DSLglobal, DSLmesh, DSLoverlay;
 
     VertexDescriptor VDsimp, VDoverlay;
-    Pipeline PMesh, POverlay;
+    Pipeline         PMesh, POverlay;
 
-    DescriptorSet DSKey;
+    DescriptorSet    DSGubo, DSKey;
     Texture TKey;
     Model MKey;
 
@@ -118,7 +118,7 @@ protected:
         RP.width  = w;
         RP.height = h;
 
-        txt.resizeScreen(RP.width, RP.height);
+        txt.resizeScreen(w, h);
     }
 
     void localInit() override {
@@ -130,7 +130,7 @@ protected:
 
         // set = 1 (local)
         DSLmesh.init(this, {
-            { 0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, VK_SHADER_STAGE_ALL_GRAPHICS,
+            { 0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT,
             sizeof(LocalUBO), 1 },
             { 1, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT,
             0, 1 },
@@ -153,39 +153,46 @@ protected:
             {0, 2, VK_FORMAT_R32G32_SFLOAT,    offsetof(VertexSimp,UV),   sizeof(glm::vec2), UV}
         });
 
-        VDoverlay.init(this, {
-            {0, sizeof(VertexOverlay), VK_VERTEX_INPUT_RATE_VERTEX}},
-            {{0, 0, VK_FORMAT_R32G32_SFLOAT, offsetof(VertexOverlay, pos),
-                    sizeof(glm::vec2), OTHER},
-                {0, 1, VK_FORMAT_R32G32_SFLOAT, offsetof(VertexOverlay, UV),
-                    sizeof(glm::vec2), UV}
+        VDoverlay.init(this,
+        { {0, sizeof(VertexOverlay), VK_VERTEX_INPUT_RATE_VERTEX} },
+            {
+                {0, 0, VK_FORMAT_R32G32_SFLOAT, offsetof(VertexOverlay, pos), sizeof(glm::vec2), OTHER},
+                {0, 1, VK_FORMAT_R32G32_SFLOAT, offsetof(VertexOverlay, UV), sizeof(glm::vec2), UV}
             });
+
+        RP.init(this);
+        RP.properties[0].clearValue = {0.05f, 0.05f, 0.08f, 1.0f};
 
         POverlay.init(this, &VDoverlay,
             "shaders/Overlay.vert.spv",
             "shaders/Overlay.frag.spv",
             {&DSLoverlay});
+
+        POverlay.setCompareOp(VK_COMPARE_OP_LESS_OR_EQUAL);
         POverlay.setCullMode(VK_CULL_MODE_NONE);
-
-        VDRs.resize(1);
-        VDRs[0].init("VDsimp", &VDsimp);
-
-        RP.init(this);
-        RP.properties[0].clearValue = {0.05f, 0.05f, 0.08f, 1.0f};
+        POverlay.setPolygonMode(VK_POLYGON_MODE_FILL);
 
         PMesh.init(this, &VDsimp,
             "shaders/Mesh.vert.spv",
             "shaders/Lambert-Blinn.frag.spv",
         { &DSLglobal, &DSLmesh });
+
         PMesh.setCullMode(VK_CULL_MODE_NONE);
+        PMesh.setPolygonMode(VK_POLYGON_MODE_FILL);
+        PMesh.setCompareOp(VK_COMPARE_OP_LESS_OR_EQUAL);
+
+        VDRs.resize(1);
+        VDRs[0].init("VDsimp", &VDsimp);
 
         PRs.resize(1);
         PRs[0].init("Mesh", {
-          { &PMesh, { /* set0 (global) */{},
-                      /* set1 (local)  */{
-                        /* binding 0: UBO  */ {true, 0, {}},
-                        /* binding 1: tex  */ {true, 1, {}}
-                      }}}
+          { &PMesh, { {},
+            {
+                { true, 0, {} },
+                { true, 1, {} },
+                }
+            }
+          }
         }, 2, &VDsimp);
 
         // Pool sizing
@@ -196,10 +203,10 @@ protected:
         MKey.vertices = std::vector<unsigned char>(4 * sizeof(VertexOverlay));
         VertexOverlay *V2 = (VertexOverlay *)(&(MKey.vertices[0]));
 
-        V2[0] = {{-0.6f, -0.6f}, {0.0f, 0.0f}}; // bottom-left
-        V2[1] = {{-0.6f,  0.6f}, {0.0f, 1.0f}}; // top-left
-        V2[2] = {{ 0.6f, -0.6f}, {1.0f, 0.0f}}; // bottom-right
-        V2[3] = {{ 0.6f,  0.6f}, {1.0f, 1.0f}}; // top-right
+        V2[0] = { {-0.6f, -0.6f}, {0.0f, 0.0f} }; // bottom-left
+        V2[1] = { {-0.6f,  0.6f}, {0.0f, 1.0f} }; // top-left
+        V2[2] = { { 0.6f, -0.6f}, {1.0f, 0.0f} }; // bottom-right
+        V2[3] = { { 0.6f,  0.6f}, {1.0f, 1.0f} }; // top-right
 
         MKey.indices = {0, 1, 2, 1, 2, 3};
         MKey.initMesh(this, &VDoverlay);
@@ -208,12 +215,9 @@ protected:
 
         txt.init(this, windowWidth, windowHeight);
 
-        // Add a tiny dummy
-        txt.print(-0.95f, -0.95f, ("CAM MODE"), 2, "SS");
-        txt.print(-0.95f, -0.85f, "Currently editing: \nNone", 4, "SS", false,
+        txt.print(-0.95f, -0.95f, ("CAM MODE"), 1, "SS");
+        txt.print(-0.95f, -0.85f, "Currently editing: \nNone", 2, "SS", false,
                 true, true, TAL_LEFT, TRH_LEFT, TRV_TOP);
-        txt.print(-0.95f, -0.75, (""), 1, "SS", false, true,
-                    true, TAL_LEFT, TRH_LEFT, TRV_TOP);
         txt.updateCommandBuffer();
 
         std::cout << "\nLoading the scene\n\n";
@@ -226,6 +230,7 @@ protected:
         PMesh.create(&RP);
         POverlay.create(&RP);
 
+        DSGubo.init(this, &DSLglobal, {});
         DSKey.init(this, &DSLoverlay, {TKey.getViewAndSampler()});
 
         SC.pipelinesAndDescriptorSetsInit();
@@ -236,6 +241,7 @@ protected:
 
     void pipelinesAndDescriptorSetsCleanup() override {
         PMesh.cleanup();
+        DSGubo.cleanup();
         POverlay.cleanup();
         DSKey.cleanup();
         RP.cleanup();
@@ -263,6 +269,7 @@ protected:
         RP.begin(cmdBuffer, currentImage);
 
         PMesh.bind(cmdBuffer);
+        DSGubo.bind(cmdBuffer, PMesh, 0, currentImage);  // set = 0 for scene
         SC.populateCommandBuffer(cmdBuffer, 0, currentImage);  // draws all mesh instances
 
         POverlay.bind(cmdBuffer);
@@ -305,9 +312,8 @@ protected:
     }
 
     void updateUniformBuffer(uint32_t currentImage) {
-        if (glfwGetKey(window, GLFW_KEY_ESCAPE)){
-            glfwSetWindowShouldClose(window, GL_TRUE);
-        }
+
+        if (glfwGetKey(window, GLFW_KEY_ESCAPE)) glfwSetWindowShouldClose(window, GL_TRUE);
 
         float dt = 0.0f;
         glm::vec3 m(0.0f), r(0.0f);
@@ -349,7 +355,7 @@ protected:
         g.g = 5.0f;
         g.numLights = 8;
         g.ambientLightColor = glm::vec3(0.2f, 0.19f, 0.18f);
-        g.eyePos = camPos;
+        g.eyePos     = camPos;
 
         for (int i = 0; i < SC.TI[0].InstanceCount; ++i) {
             auto &inst = SC.TI[0].I[i];
@@ -357,8 +363,8 @@ protected:
             LocalUBO l{};
             l.gamma = 120.0f;
             l.specularColor = glm::vec3(1.0f, 0.95f, 0.9f);
-            l.mMat = inst.Wm;
-            l.nMat = glm::inverse(glm::transpose(l.mMat));
+            l.mMat   = inst.Wm;
+            l.nMat   = glm::inverse(glm::transpose(l.mMat));
             l.mvpMat = Prj * View * l.mMat;
 
             const std::string& iid = *inst.id;  // instance's string id
@@ -384,9 +390,9 @@ protected:
 
         if (state == GLFW_PRESS && prevPlusState == GLFW_RELEASE) {
             showKeyOverlay = !showKeyOverlay;
-            txt.print(-0.95f, -0.7, (showKeyOverlay ? "" : "Hold L to see all furnitures"), 3,
+            txt.print(-0.95f, -0.7, (showKeyOverlay ? "" : "Hold L to see all furnitures"), 4,
                 "SS", false, true, true, TAL_LEFT, TRH_LEFT, TRV_TOP);
-            txt.print(-0.95f, -0.75, (showKeyOverlay ? "" : "Press P to show keyboard actions"), 1,
+            txt.print(-0.95f, -0.75, (showKeyOverlay ? "" : "Press P to show keyboard actions"), 3,
                 "SS", false, true, true, TAL_LEFT, TRH_LEFT, TRV_TOP);
             txt.updateCommandBuffer();
         }
@@ -395,7 +401,7 @@ protected:
     }
 
     void handleDelete() {
-        // Hide current selection (K toggles)
+
         int kState = glfwGetKey(window, GLFW_KEY_D);
 
         if (kState == GLFW_PRESS && prevDelState == GLFW_RELEASE && editMode) {
@@ -418,12 +424,12 @@ protected:
                     ? "Currently editing: \n" + selectableIds[selectedListPos]
                     : "Currently editing: \nNone";
 
-                txt.print(-0.95f, -0.85f, curr, 4, "SS", false,
+                txt.print(-0.95f, -0.85f, curr, 2, "SS", false,
                     true, true, TAL_LEFT, TRH_LEFT, TRV_TOP);
 
                 // Refresh list only if L is currently held
                 if (glfwGetKey(window, GLFW_KEY_L) == GLFW_PRESS) {
-                    txt.print(-0.95f, -0.7f, makeVisibleListString(), 3, "SS",
+                    txt.print(-0.95f, -0.7f, makeVisibleListString(), 4, "SS",
                         false, true, true, TAL_LEFT, TRH_LEFT, TRV_TOP);
                 }
 
@@ -440,7 +446,7 @@ protected:
         if (s == GLFW_PRESS && prevQState == GLFW_RELEASE) {
             editMode = !editMode;
             std::cout << (editMode ? "[MODE] Edit\n" : "[MODE] Camera\n");
-            txt.print(-0.95f, -0.95f, (editMode ? "EDIT MODE" : "CAM MODE"), 2, "SS");
+            txt.print(-0.95f, -0.95f, (editMode ? "EDIT MODE" : "CAM MODE"), 1, "SS");
             txt.updateCommandBuffer();
         }
 
@@ -452,14 +458,14 @@ protected:
 
         // pressed -> show list
         if (state == GLFW_PRESS && prevLState == GLFW_RELEASE && !showKeyOverlay) {
-            txt.print(-0.95f, -0.7f, makeVisibleListString(), 3, "SS",
+            txt.print(-0.95f, -0.7f, makeVisibleListString(), 4, "SS",
                 false, true, true, TAL_LEFT, TRH_LEFT, TRV_TOP);
             txt.updateCommandBuffer();
         }
 
         // released -> show hint (do NOT touch the "Currently editing" line)
         if (state == GLFW_RELEASE && prevLState == GLFW_PRESS && !showKeyOverlay) {
-            txt.print(-0.95f, -0.7f, "Press L to see all furnitures", 3, "SS",
+            txt.print(-0.95f, -0.7f, "Press L to see all furnitures", 4, "SS",
                 false, true, true, TAL_LEFT, TRH_LEFT, TRV_TOP);
             txt.updateCommandBuffer();
         }
@@ -481,12 +487,12 @@ protected:
                 ? "Currently editing: \n" + selectableIds[selectedListPos]
                 : "Currently editing: \nNone";
 
-            txt.print(-0.95f, -0.85f, curr, 4, "SS", false,
+            txt.print(-0.95f, -0.85f, curr, 2, "SS", false,
                         true, true, TAL_LEFT, TRH_LEFT, TRV_TOP);
 
             // Optional: if L held, refresh the list content too
             if (glfwGetKey(window, GLFW_KEY_L) == GLFW_PRESS) {
-                txt.print(-0.95f, -0.7f, makeVisibleListString(), 3, "SS",
+                txt.print(-0.95f, -0.7f, makeVisibleListString(), 4, "SS",
                     false, true, true, TAL_LEFT, TRH_LEFT, TRV_TOP);
             }
 
@@ -598,7 +604,6 @@ protected:
                 s += selectableIds[i] + "\n";
             }
         }
-
 
         if (s.empty()) {
             s = "(no visible objects)";
