@@ -85,9 +85,9 @@ protected:
     DescriptorSetLayout DSLglobal, DSLmesh, DSLoverlay;
 
     VertexDescriptor VDsimp, VDoverlay;
-    Pipeline         PMesh, POverlay;
+    Pipeline PMesh, POverlay;
 
-    DescriptorSet    DSGubo, DSKey;
+    DescriptorSet DSKey;
     Texture TKey;
     Model MKey;
 
@@ -130,7 +130,7 @@ protected:
 
         // set = 1 (local)
         DSLmesh.init(this, {
-            { 0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT,
+            { 0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, VK_SHADER_STAGE_ALL_GRAPHICS,
             sizeof(LocalUBO), 1 },
             { 1, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT,
             0, 1 },
@@ -165,10 +165,7 @@ protected:
             "shaders/Overlay.vert.spv",
             "shaders/Overlay.frag.spv",
             {&DSLoverlay});
-
-        POverlay.setCompareOp(VK_COMPARE_OP_LESS_OR_EQUAL);
         POverlay.setCullMode(VK_CULL_MODE_NONE);
-        POverlay.setPolygonMode(VK_POLYGON_MODE_FILL);
 
         VDRs.resize(1);
         VDRs[0].init("VDsimp", &VDsimp);
@@ -181,38 +178,35 @@ protected:
             "shaders/Lambert-Blinn.frag.spv",
         { &DSLglobal, &DSLmesh });
         PMesh.setCullMode(VK_CULL_MODE_NONE);
-        PMesh.setPolygonMode(VK_POLYGON_MODE_FILL);
-        PMesh.setCompareOp(VK_COMPARE_OP_LESS_OR_EQUAL);
 
         PRs.resize(1);
         PRs[0].init("Mesh", {
           { &PMesh, { /* set0 (global) */{},
                       /* set1 (local)  */{
-                        /* binding 0: UBO  */ { true, 0, {} },
-                        /* binding 1: tex  */ { true, 1, { } }
-                      } } }
+                        /* binding 0: UBO  */ {true, 0, {}},
+                        /* binding 1: tex  */ {true, 1, {}}
+                      }}}
         }, 2, &VDsimp);
 
         // Pool sizing
         DPSZs.uniformBlocksInPool = 4;
-        DPSZs.texturesInPool      = 29;
+        DPSZs.texturesInPool      = 30;
         DPSZs.setsInPool          = 3;
 
         MKey.vertices = std::vector<unsigned char>(4 * sizeof(VertexOverlay));
         VertexOverlay *V2 = (VertexOverlay *)(&(MKey.vertices[0]));
 
-        V2[0] = { {-0.6f, -0.6f}, {0.0f, 0.0f} }; // bottom-left
-        V2[1] = { {-0.6f,  0.6f}, {0.0f, 1.0f} }; // top-left
-        V2[2] = { { 0.6f, -0.6f}, {1.0f, 0.0f} }; // bottom-right
-        V2[3] = { { 0.6f,  0.6f}, {1.0f, 1.0f} }; // top-right
+        V2[0] = {{-0.6f, -0.6f}, {0.0f, 0.0f}}; // bottom-left
+        V2[1] = {{-0.6f,  0.6f}, {0.0f, 1.0f}}; // top-left
+        V2[2] = {{ 0.6f, -0.6f}, {1.0f, 0.0f}}; // bottom-right
+        V2[3] = {{ 0.6f,  0.6f}, {1.0f, 1.0f}}; // top-right
 
-        MKey.indices = {0, 1, 2,    1, 2, 3};
+        MKey.indices = {0, 1, 2, 1, 2, 3};
         MKey.initMesh(this, &VDoverlay);
 
         TKey.init(this, "assets/models/Keyboard.png");
 
         txt.init(this, windowWidth, windowHeight);
-
 
         // Add a tiny dummy
         txt.print(-0.95f, -0.95f, ("CAM MODE"), 2, "SS");
@@ -232,7 +226,6 @@ protected:
         PMesh.create(&RP);
         POverlay.create(&RP);
 
-        DSGubo.init(this, &DSLglobal, {});
         DSKey.init(this, &DSLoverlay, {TKey.getViewAndSampler()});
 
         SC.pipelinesAndDescriptorSetsInit();
@@ -243,7 +236,6 @@ protected:
 
     void pipelinesAndDescriptorSetsCleanup() override {
         PMesh.cleanup();
-        DSGubo.cleanup();
         POverlay.cleanup();
         DSKey.cleanup();
         RP.cleanup();
@@ -271,7 +263,6 @@ protected:
         RP.begin(cmdBuffer, currentImage);
 
         PMesh.bind(cmdBuffer);
-        DSGubo.bind(cmdBuffer, PMesh, 0, currentImage);  // set = 0 for scene
         SC.populateCommandBuffer(cmdBuffer, 0, currentImage);  // draws all mesh instances
 
         POverlay.bind(cmdBuffer);
@@ -314,7 +305,9 @@ protected:
     }
 
     void updateUniformBuffer(uint32_t currentImage) {
-        if (glfwGetKey(window, GLFW_KEY_ESCAPE)) glfwSetWindowShouldClose(window, GL_TRUE);
+        if (glfwGetKey(window, GLFW_KEY_ESCAPE)){
+            glfwSetWindowShouldClose(window, GL_TRUE);
+        }
 
         float dt = 0.0f;
         glm::vec3 m(0.0f), r(0.0f);
@@ -356,7 +349,7 @@ protected:
         g.g = 5.0f;
         g.numLights = 8;
         g.ambientLightColor = glm::vec3(0.2f, 0.19f, 0.18f);
-        g.eyePos     = camPos;
+        g.eyePos = camPos;
 
         for (int i = 0; i < SC.TI[0].InstanceCount; ++i) {
             auto &inst = SC.TI[0].I[i];
@@ -364,8 +357,8 @@ protected:
             LocalUBO l{};
             l.gamma = 120.0f;
             l.specularColor = glm::vec3(1.0f, 0.95f, 0.9f);
-            l.mMat   = inst.Wm;
-            l.nMat   = glm::inverse(glm::transpose(l.mMat));
+            l.mMat = inst.Wm;
+            l.nMat = glm::inverse(glm::transpose(l.mMat));
             l.mvpMat = Prj * View * l.mMat;
 
             const std::string& iid = *inst.id;  // instance's string id
