@@ -117,6 +117,8 @@ protected:
         if (h > 0) Ar = float(w) / float(h);
         RP.width  = w;
         RP.height = h;
+
+        txt.resizeScreen(RP.width, RP.height);
     }
 
     void localInit() override {
@@ -210,7 +212,7 @@ protected:
         TKey.init(this, "assets/models/Keyboard.png");
 
         txt.init(this, windowWidth, windowHeight);
-        txt.resizeScreen(RP.width, RP.height);
+
 
         // Add a tiny dummy
         txt.print(-0.95f, -0.95f, ("CAM MODE"), 2, "SS");

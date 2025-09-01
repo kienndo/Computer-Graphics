@@ -29,9 +29,14 @@
     </configurations>
   </component>
   <component name="ChangeListManager">
-    <list default="true" id="72edde42-13d2-4df3-b1df-094f5281efff" name="Changes" comment="Formatted main">
+    <list default="true" id="72edde42-13d2-4df3-b1df-094f5281efff" name="Changes" comment="Changed order of light positions in LightPos">
+      <change beforePath="$PROJECT_DIR$/.idea/editor.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/editor.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/.idea/shelf/Uncommitted_changes_before_Update_at_22_08_2025,_14_42_[Changes]/Fonts.png" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/.idea/shelf/Uncommitted_changes_before_Update_at_22_08_2025,_14_42_[Changes]/shelved.patch" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/.idea/shelf/Uncommitted_changes_before_Update_at_22_08_2025__14_42__Changes_.xml" beforeDir="false" />
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/assets/models/scene.json" beforeDir="false" afterPath="$PROJECT_DIR$/assets/models/scene.json" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/main.cpp" beforeDir="false" afterPath="$PROJECT_DIR$/src/main.cpp" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -58,6 +63,7 @@
   }
 }</component>
   <component name="HighlightingSettingsPerFile">
+    <setting file="mock://C:/Users/julie/CLionProjects/CG_hospital/src/main.cpp" root0="SKIP_HIGHLIGHTING" />
     <setting file="mock://C:/Users/julie/CLionProjects/CG_hospital/src/main.cpp" root0="SKIP_HIGHLIGHTING" />
     <setting file="mock://C:/Users/julie/CLionProjects/CG_hospital/src/main.cpp" root0="SKIP_HIGHLIGHTING" />
     <setting file="mock://C:/Users/julie/CLionProjects/CG_hospital/src/main.cpp" root0="SKIP_HIGHLIGHTING" />
@@ -113,17 +119,17 @@
     </key>
   </component>
   <component name="RunManager" selected="CMake Application.CG_hospital">
+    <configuration default="true" type="CLionExternalRunConfiguration" factoryName="Application" REDIRECT_INPUT="false" ELEVATE="false" USE_EXTERNAL_CONSOLE="false" EMULATE_TERMINAL="false" PASS_PARENT_ENVS_2="true">
+      <method v="2">
+        <option name="CLION.EXTERNAL.BUILD" enabled="true" />
+      </method>
+    </configuration>
     <configuration name="CG_hospital" type="CMakeRunConfiguration" factoryName="Application" REDIRECT_INPUT="false" ELEVATE="false" USE_EXTERNAL_CONSOLE="false" EMULATE_TERMINAL="false" PASS_PARENT_ENVS_2="true" PROJECT_NAME="CG_hospital" TARGET_NAME="CG_hospital" CONFIG_NAME="Debug" RUN_TARGET_PROJECT_NAME="CG_hospital" RUN_TARGET_NAME="CG_hospital">
       <method v="2">
         <option name="com.jetbrains.cidr.execution.CidrBuildBeforeRunTaskProvider$BuildBeforeRunTask" enabled="true" />
       </method>
     </configuration>
     <configuration name="CG_hospital_Shaders" type="CMakeRunConfiguration" factoryName="Application" REDIRECT_INPUT="false" ELEVATE="false" USE_EXTERNAL_CONSOLE="false" EMULATE_TERMINAL="false" PASS_PARENT_ENVS_2="true" PROJECT_NAME="CG_hospital" TARGET_NAME="CG_hospital_Shaders" CONFIG_NAME="Debug">
-      <method v="2">
-        <option name="com.jetbrains.cidr.execution.CidrBuildBeforeRunTaskProvider$BuildBeforeRunTask" enabled="true" />
-      </method>
-    </configuration>
-    <configuration default="true" type="CMakeRunConfiguration" factoryName="Application" REDIRECT_INPUT="false" ELEVATE="false" USE_EXTERNAL_CONSOLE="false" EMULATE_TERMINAL="false" PASS_PARENT_ENVS_2="true">
       <method v="2">
         <option name="com.jetbrains.cidr.execution.CidrBuildBeforeRunTaskProvider$BuildBeforeRunTask" enabled="true" />
       </method>
@@ -148,7 +154,9 @@
       <workItem from="1755707332338" duration="9875000" />
       <workItem from="1755774526039" duration="20934000" />
       <workItem from="1755961050222" duration="478000" />
-      <workItem from="1756369463695" duration="24770000" />
+      <workItem from="1756369463695" duration="26233000" />
+      <workItem from="1756562063471" duration="2083000" />
+      <workItem from="1756716734386" duration="2831000" />
     </task>
     <task id="LOCAL−00001" summary="one aircondition through scene.json works">
       <option name="closed" value="true" />
@@ -205,7 +213,23 @@
       <option name="project" value="LOCAL" />
       <updated>1756472713897</updated>
     </task>
-    <option name="localTasksCounter" value="8" />
+    <task id="LOCAL-00008" summary="More descriptive ids to objects">
+      <option name="closed" value="true" />
+      <created>1756474297246</created>
+      <option name="number" value="00008" />
+      <option name="presentableId" value="LOCAL-00008" />
+      <option name="project" value="LOCAL" />
+      <updated>1756474297246</updated>
+    </task>
+    <task id="LOCAL-00009" summary="Changed order of light positions in LightPos">
+      <option name="closed" value="true" />
+      <created>1756474728354</created>
+      <option name="number" value="00009" />
+      <option name="presentableId" value="LOCAL-00009" />
+      <option name="project" value="LOCAL" />
+      <updated>1756474728354</updated>
+    </task>
+    <option name="localTasksCounter" value="10" />
     <servers />
   </component>
   <component name="TypeScriptGeneratedFilesManager">
@@ -239,6 +263,8 @@
     <MESSAGE value="Added 4 point lights and it works" />
     <MESSAGE value="8 polint lights finished and extended far plane to see the whole hospital" />
     <MESSAGE value="Formatted main" />
-    <option name="LAST_COMMIT_MESSAGE" value="Formatted main" />
+    <MESSAGE value="More descriptive ids to objects" />
+    <MESSAGE value="Changed order of light positions in LightPos" />
+    <option name="LAST_COMMIT_MESSAGE" value="Changed order of light positions in LightPos" />
   </component>
 </project>
