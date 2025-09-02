@@ -38,7 +38,7 @@ struct LocalUBO {
     alignas(16) glm::mat4 mvpMat;
     alignas(16) glm::mat4 mMat;
     alignas(16) glm::mat4 nMat;
-    alignas(16) glm::vec4 highlight;
+    alignas(16) glm::vec4 visibilityFlag;
 };
 
 struct OverlayUniformBuffer {
@@ -76,10 +76,10 @@ protected:
 
     OverlayUniformBuffer KeyUBO{};
 
-    std::vector<int> selectableIndices;  // Assets
+    std::vector<int> selectableIndices;  // All instances
     std::vector<std::string> selectableIds;  // Name of the assets
-    int  selectedObjectIndex = -1;
-    int  selectedListPos     = -1;
+    int  selectedObjectIndex = -1; // Index in scene.json
+    int  selectedListPos     = -1; // Index in selectableIndices
 
     RenderPass RP;
     DescriptorSetLayout DSLglobal, DSLmesh, DSLoverlay;
@@ -333,11 +333,11 @@ protected:
             l.nMat   = glm::inverse(glm::transpose(l.mMat));
             l.mvpMat = Prj * View * l.mMat;
 
-            const std::string& iid = *inst.id;
-            float visible = (hiddenIds.count(iid) ? 0.0f : 1.0f);
+            const std::string& instances = *inst.id;
+            float visible = (hiddenIds.count(instances) ? 0.0f : 1.0f);
 
-            l.highlight = glm::vec4(
-                (i == selectedObjectIndex) ? 1.0f : 0.0f,
+            l.visibilityFlag = glm::vec4(
+                0.0f,
                 0.0f,
                 0.0f,
                 visible
@@ -353,33 +353,35 @@ protected:
     }
 
     static void populateCommandBufferAccess(VkCommandBuffer commandBuffer, int currentImage, void *params) {
+
         auto *app = reinterpret_cast<CG_hospital*>(params);
         app->populateCommandBuffer(commandBuffer, currentImage);
+
     }
 
     void updateFromInput(float dt, const glm::vec3& m, const glm::vec3& r, bool fire) {
-        const float ROT_SPEED       = glm::radians(120.0f);
-        const float MOVE_SPEED      = 20.0f;
+        const float ROT_SPEED = (fire ? glm::radians(180.0f) : glm::radians(120.0f));
+        const float MOVE_SPEED = (fire ? 20.0f : 15.0f);
         const float SCALE_SPEED = (fire ? 1.5f : 1.2f);
         float step = std::pow(SCALE_SPEED, dt * 5.0f);
 
         if (!editMode) {
             // CAMERA MODE
-            camYaw   -= r.y * ROT_SPEED * dt;
+            camYaw -= r.y * ROT_SPEED * dt;
             camPitch -= r.x * ROT_SPEED * dt;
-            camPitch  = glm::clamp(camPitch, glm::radians(-89.0f), glm::radians(89.0f));
+            camPitch = glm::clamp(camPitch, glm::radians(-89.0f), glm::radians(89.0f));
 
-            glm::mat4 Ry = glm::rotate(glm::mat4(1), camYaw,   glm::vec3(0,1,0));
+            glm::mat4 Ry = glm::rotate(glm::mat4(1), camYaw, glm::vec3(0,1,0));
             glm::mat4 Rx = glm::rotate(glm::mat4(1), camPitch, glm::vec3(1,0,0));
             glm::mat4 R  = Ry * Rx;
 
-            camFwd   = glm::normalize(glm::vec3(R * glm::vec4(0,0,-1,0)));
+            camFwd = glm::normalize(glm::vec3(R * glm::vec4(0,0,-1,0)));
             camRight = glm::normalize(glm::vec3(R * glm::vec4(1,0, 0,0)));
-            camUp    = glm::normalize(glm::vec3(R * glm::vec4(0,1, 0,0)));
+            camUp = glm::normalize(glm::vec3(R * glm::vec4(0,1, 0,0)));
 
             camPos += camRight * (m.x * MOVE_SPEED * dt);
-            camPos += camUp    * (m.y * MOVE_SPEED * dt);
-            camPos -= camFwd   * (m.z * MOVE_SPEED * dt);
+            camPos += camUp * (m.y * MOVE_SPEED * dt);
+            camPos -= camFwd * (m.z * MOVE_SPEED * dt);
         } else {
             // EDIT MODE for instances
             if (selectedObjectIndex < 0) return;
@@ -429,14 +431,14 @@ protected:
         int pState = glfwGetKey(window, GLFW_KEY_P);
         if (pState == GLFW_PRESS && prevPlusState == GLFW_RELEASE) {
             showKeyOverlay = !showKeyOverlay;
-            txt.print(-0.95f, -0.7, (showKeyOverlay ? "" : "Hold L to see all furnitures"), 4,
-                "SS", false, true, true, TAL_LEFT, TRH_LEFT, TRV_TOP);
             txt.print(-0.95f, -0.75, (showKeyOverlay ? "" : "Press P to show keyboard actions"), 3,
+                "SS", false, true, true, TAL_LEFT, TRH_LEFT, TRV_TOP);
+            txt.print(-0.95f, -0.7, (showKeyOverlay ? "" : "Hold L to see all furnitures"), 4,
                 "SS", false, true, true, TAL_LEFT, TRH_LEFT, TRV_TOP);
             txt.updateCommandBuffer();
         }
-
         prevPlusState = pState;
+
     }
 
     void handleDelete() {
@@ -457,7 +459,7 @@ protected:
                 }
 
                 const std::string curr =
-                    (selectedListPos >= 0 && selectedListPos < (int)selectableIds.size())
+                    (selectedListPos < (int)selectableIds.size())
                     ? "Currently editing: \n" + selectableIds[selectedListPos]
                     : "Currently editing: \nNone";
 
@@ -488,6 +490,7 @@ protected:
     }
 
     void handleListDisplay() {
+
         int lState = glfwGetKey(window, GLFW_KEY_L);
 
         // pressed; show list
@@ -505,13 +508,14 @@ protected:
         }
 
         prevLState = lState;
+
     }
 
     void handleObjectSelection() {
         int tabState = glfwGetKey(window, GLFW_KEY_TAB);
 
         if (tabState == GLFW_PRESS && prevTabState == GLFW_RELEASE) {
-            if (selectableIndices.empty() || !selectNextVisible(+1)) {
+            if (selectableIndices.empty() || !selectNextVisible()) {
                 selectedListPos = -1;
                 selectedObjectIndex = -1;
             }
@@ -523,11 +527,6 @@ protected:
 
             txt.print(-0.95f, -0.85f, curr, 2, "SS", false,
                         true, true, TAL_LEFT, TRH_LEFT, TRV_TOP);
-
-            if (glfwGetKey(window, GLFW_KEY_L) == GLFW_PRESS) {
-                txt.print(-0.95f, -0.7f, makeVisibleListString(), 4, "SS",
-                    false, true, true, TAL_LEFT, TRH_LEFT, TRV_TOP);
-            }
 
             txt.updateCommandBuffer();
         }
@@ -546,7 +545,7 @@ protected:
         auto& elements = instBlocks[0]["elements"];
         if (!elements.is_array()) return;
 
-        // Denylist / rules for unselectables (floor, wall, etc.)
+        // Instances we do not edit
         auto isUnselectable = [](const std::string& id){
             std::string s = id;
             std::transform(s.begin(), s.end(), s.begin(), ::tolower);
@@ -566,11 +565,6 @@ protected:
         }
     }
 
-    bool isVisibleAtListPos(int listPos) const {
-        return (listPos >= 0 && listPos < (int)selectableIds.size() &&
-                hiddenIds.count(selectableIds[listPos]) == 0);
-    }
-
     std::string makeVisibleListString() const {
 
         std::string s;
@@ -579,7 +573,6 @@ protected:
                 s += selectableIds[i] + "\n";
             }
         }
-
         if (s.empty()) {
             s = "(no visible objects)";
         }
@@ -587,23 +580,27 @@ protected:
         return s;
     }
 
-    bool selectNextVisible(int step = +1) {
+    bool selectNextVisible() {
         if (selectableIndices.empty()){
-            selectedListPos = -1; selectedObjectIndex = -1; return false;
+            selectedListPos = -1;
+            selectedObjectIndex = -1;
+            return false;
         }
 
+        int step = 1;
         const int n = (int)selectableIndices.size();
 
         for (int k = 0; k < n; ++k) {
-            selectedListPos = (selectedListPos + step + n) % n;
+            selectedListPos = (selectedListPos + step + n % n); // Increases with step and wraps around if at the end
 
             if (hiddenIds.count(selectableIds[selectedListPos]) == 0) {
                 selectedObjectIndex = selectableIndices[selectedListPos];
                 return true;
             }
         }
-
-        selectedListPos = -1; selectedObjectIndex = -1; return false;
+        selectedListPos = -1;
+        selectedObjectIndex = -1;
+        return false;
     }
 };
 
