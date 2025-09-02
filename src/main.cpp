@@ -87,7 +87,7 @@ protected:
     VertexDescriptor VDsimp, VDoverlay;
     Pipeline         PMesh, POverlay;
 
-    DescriptorSet    DSGubo, DSKey;
+    DescriptorSet DSKey;
     Texture TKey;
     Model MKey;
 
@@ -103,7 +103,6 @@ protected:
     float     camYaw   = 0.0f;
     float     camPitch = -0.5f;
     glm::vec3 camFwd{0,0,-1}, camRight{1,0,0}, camUp{0,1,0};
-
 
     void setWindowParameters() {
         windowWidth = 1280;
@@ -130,7 +129,7 @@ protected:
 
         // set = 1 (local)
         DSLmesh.init(this, {
-            { 0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT,
+            { 0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, VK_SHADER_STAGE_ALL_GRAPHICS,
             sizeof(LocalUBO), 1 },
             { 1, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT,
             0, 1 },
@@ -167,19 +166,13 @@ protected:
             "shaders/Overlay.vert.spv",
             "shaders/Overlay.frag.spv",
             {&DSLoverlay});
-
-        POverlay.setCompareOp(VK_COMPARE_OP_LESS_OR_EQUAL);
         POverlay.setCullMode(VK_CULL_MODE_NONE);
-        POverlay.setPolygonMode(VK_POLYGON_MODE_FILL);
 
         PMesh.init(this, &VDsimp,
             "shaders/Mesh.vert.spv",
             "shaders/Lambert-Blinn.frag.spv",
         { &DSLglobal, &DSLmesh });
-
         PMesh.setCullMode(VK_CULL_MODE_NONE);
-        PMesh.setPolygonMode(VK_POLYGON_MODE_FILL);
-        PMesh.setCompareOp(VK_COMPARE_OP_LESS_OR_EQUAL);
 
         VDRs.resize(1);
         VDRs[0].init("VDsimp", &VDsimp);
@@ -226,28 +219,30 @@ protected:
     }
 
     void pipelinesAndDescriptorSetsInit() override {
+
         RP.create();
         PMesh.create(&RP);
         POverlay.create(&RP);
 
-        DSGubo.init(this, &DSLglobal, {});
         DSKey.init(this, &DSLoverlay, {TKey.getViewAndSampler()});
 
         SC.pipelinesAndDescriptorSetsInit();
         txt.pipelinesAndDescriptorSetsInit();
 
         submitCommandBuffer("main", 0, populateCommandBufferAccess, this);
+
     }
 
     void pipelinesAndDescriptorSetsCleanup() override {
+
         PMesh.cleanup();
-        DSGubo.cleanup();
         POverlay.cleanup();
         DSKey.cleanup();
         RP.cleanup();
 
         SC.pipelinesAndDescriptorSetsCleanup();
         txt.pipelinesAndDescriptorSetsCleanup();
+
     }
 
     void localCleanup() {
@@ -266,11 +261,11 @@ protected:
     }
 
     void populateCommandBuffer(VkCommandBuffer cmdBuffer, int currentImage) {
+
         RP.begin(cmdBuffer, currentImage);
 
         PMesh.bind(cmdBuffer);
-        DSGubo.bind(cmdBuffer, PMesh, 0, currentImage);  // set = 0 for scene
-        SC.populateCommandBuffer(cmdBuffer, 0, currentImage);  // draws all mesh instances
+        SC.populateCommandBuffer(cmdBuffer, 0, currentImage);
 
         POverlay.bind(cmdBuffer);
         DSKey.bind(cmdBuffer, POverlay, 0, currentImage);
@@ -279,55 +274,26 @@ protected:
                         0, 0, 0);
 
         RP.end(cmdBuffer);
-    }
 
-
-    void updateFromInput(float dt, const glm::vec3& m, const glm::vec3& r, bool fire) {
-        const float ROT_SPEED       = glm::radians(120.0f);
-        const float MOVE_SPEED_BASE = 10.0f;
-        const float MOVE_SPEED_RUN  = 10.0f;
-        const float MOVE_SPEED      = fire ? MOVE_SPEED_RUN : MOVE_SPEED_BASE;
-
-        if (!editMode) {
-            // CAMERA MODE
-            camYaw   -= r.y * ROT_SPEED * dt;
-            camPitch -= r.x * ROT_SPEED * dt;
-            camPitch  = glm::clamp(camPitch, glm::radians(-89.0f), glm::radians(89.0f));
-
-            glm::mat4 Ry = glm::rotate(glm::mat4(1), camYaw,   glm::vec3(0,1,0));
-            glm::mat4 Rx = glm::rotate(glm::mat4(1), camPitch, glm::vec3(1,0,0));
-            glm::mat4 R  = Ry * Rx;
-
-            camFwd   = glm::normalize(glm::vec3(R * glm::vec4(0,0,-1,0)));
-            camRight = glm::normalize(glm::vec3(R * glm::vec4(1,0, 0,0)));
-            camUp    = glm::normalize(glm::vec3(R * glm::vec4(0,1, 0,0)));
-
-            camPos += camRight * (m.x * MOVE_SPEED * dt);
-            camPos += camUp    * (m.y * MOVE_SPEED * dt);
-            camPos -= camFwd   * (m.z * MOVE_SPEED * dt);
-        } else {
-            // EDIT MODE
-            manipulateSelected(dt, fire);
-        }
     }
 
     void updateUniformBuffer(uint32_t currentImage) {
 
-        if (glfwGetKey(window, GLFW_KEY_ESCAPE)) glfwSetWindowShouldClose(window, GL_TRUE);
+        if (glfwGetKey(window, GLFW_KEY_ESCAPE))
+            glfwSetWindowShouldClose(window, GL_TRUE);
 
         float dt = 0.0f;
         glm::vec3 m(0.0f), r(0.0f);
         bool fire = false;
 
         getSixAxis(dt, m, r, fire);
+        updateFromInput(dt, m, r, fire);
 
         handleObjectSelection();
         handleKeyboardOverlay();
         handleModeToggle();
         handleDelete();
         handleListDisplay();
-
-        updateFromInput(dt, m, r, fire);
 
         float Ar = float(windowWidth) / float(windowHeight);
         glm::mat4 Prj = glm::perspective(glm::radians(60.0f), Ar, 0.01f, 270.0f);
@@ -367,14 +333,14 @@ protected:
             l.nMat   = glm::inverse(glm::transpose(l.mMat));
             l.mvpMat = Prj * View * l.mMat;
 
-            const std::string& iid = *inst.id;  // instance's string id
+            const std::string& iid = *inst.id;
             float visible = (hiddenIds.count(iid) ? 0.0f : 1.0f);
 
             l.highlight = glm::vec4(
-                (i == selectedObjectIndex) ? 1.0f : 0.0f,  // x: highlighted selection
+                (i == selectedObjectIndex) ? 1.0f : 0.0f,
                 0.0f,
                 0.0f,
-                visible  // w: visibility flag (1=show, 0=hide)
+                visible
             );
 
             inst.DS[0][0]->map(currentImage, &g, 0);  // global
@@ -383,12 +349,85 @@ protected:
 
         KeyUBO.visible = showKeyOverlay ? 1.0f : 0.0f;
         DSKey.map(currentImage, &KeyUBO, 0);
+
+    }
+
+    static void populateCommandBufferAccess(VkCommandBuffer commandBuffer, int currentImage, void *params) {
+        auto *app = reinterpret_cast<CG_hospital*>(params);
+        app->populateCommandBuffer(commandBuffer, currentImage);
+    }
+
+    void updateFromInput(float dt, const glm::vec3& m, const glm::vec3& r, bool fire) {
+        const float ROT_SPEED       = glm::radians(120.0f);
+        const float MOVE_SPEED      = 20.0f;
+        const float SCALE_SPEED = (fire ? 1.5f : 1.2f);
+        float step = std::pow(SCALE_SPEED, dt * 5.0f);
+
+        if (!editMode) {
+            // CAMERA MODE
+            camYaw   -= r.y * ROT_SPEED * dt;
+            camPitch -= r.x * ROT_SPEED * dt;
+            camPitch  = glm::clamp(camPitch, glm::radians(-89.0f), glm::radians(89.0f));
+
+            glm::mat4 Ry = glm::rotate(glm::mat4(1), camYaw,   glm::vec3(0,1,0));
+            glm::mat4 Rx = glm::rotate(glm::mat4(1), camPitch, glm::vec3(1,0,0));
+            glm::mat4 R  = Ry * Rx;
+
+            camFwd   = glm::normalize(glm::vec3(R * glm::vec4(0,0,-1,0)));
+            camRight = glm::normalize(glm::vec3(R * glm::vec4(1,0, 0,0)));
+            camUp    = glm::normalize(glm::vec3(R * glm::vec4(0,1, 0,0)));
+
+            camPos += camRight * (m.x * MOVE_SPEED * dt);
+            camPos += camUp    * (m.y * MOVE_SPEED * dt);
+            camPos -= camFwd   * (m.z * MOVE_SPEED * dt);
+        } else {
+            // EDIT MODE for instances
+            if (selectedObjectIndex < 0) return;
+
+            auto &inst = SC.TI[0].I[selectedObjectIndex];
+
+            // TRANSLATE
+            if (glfwGetKey(window, GLFW_KEY_LEFT) == GLFW_PRESS) {
+                inst.Wm = glm::translate(glm::mat4(1), glm::vec3(-MOVE_SPEED*dt, 0, 0)) * inst.Wm;
+            }
+            if (glfwGetKey(window, GLFW_KEY_RIGHT) == GLFW_PRESS) {
+                inst.Wm = glm::translate(glm::mat4(1), glm::vec3(MOVE_SPEED*dt, 0, 0)) * inst.Wm;
+            }
+            if (glfwGetKey(window, GLFW_KEY_UP) == GLFW_PRESS) {
+                inst.Wm = glm::translate(glm::mat4(1), glm::vec3(0, 0, -MOVE_SPEED*dt)) * inst.Wm;
+            }
+            if (glfwGetKey(window, GLFW_KEY_DOWN) == GLFW_PRESS) {
+                inst.Wm = glm::translate(glm::mat4(1), glm::vec3(0, 0, MOVE_SPEED*dt)) * inst.Wm;
+            }
+            if (glfwGetKey(window, GLFW_KEY_PAGE_UP) == GLFW_PRESS) {
+                inst.Wm = glm::translate(glm::mat4(1), glm::vec3(0, MOVE_SPEED*dt, 0)) * inst.Wm;
+            }
+            if (glfwGetKey(window, GLFW_KEY_PAGE_DOWN) == GLFW_PRESS) {
+                inst.Wm = glm::translate(glm::mat4(1), glm::vec3(0, -MOVE_SPEED*dt, 0)) * inst.Wm;
+            }
+
+            // ROTATE about Y-axis
+            if (glfwGetKey(window, GLFW_KEY_T) == GLFW_PRESS) {
+                inst.Wm = inst.Wm * glm::rotate(glm::mat4(1), ROT_SPEED*dt, glm::vec3(0,1,0));
+            }
+            if (glfwGetKey(window, GLFW_KEY_G) == GLFW_PRESS) {
+                inst.Wm = inst.Wm * glm::rotate(glm::mat4(1), -ROT_SPEED*dt, glm::vec3(0,1,0));
+            }
+
+            // SCALE
+            if (glfwGetKey(window, GLFW_KEY_W) == GLFW_PRESS) { // grow
+                inst.Wm = inst.Wm * glm::scale(glm::mat4(1.0f), glm::vec3(step));
+            }
+            if (glfwGetKey(window, GLFW_KEY_S) == GLFW_PRESS) { // shrink
+                inst.Wm = inst.Wm * glm::scale(glm::mat4(1.0f), glm::vec3(1.0f / step));
+            }
+        }
     }
 
     void handleKeyboardOverlay() {
-        int state = glfwGetKey(window, GLFW_KEY_P);
 
-        if (state == GLFW_PRESS && prevPlusState == GLFW_RELEASE) {
+        int pState = glfwGetKey(window, GLFW_KEY_P);
+        if (pState == GLFW_PRESS && prevPlusState == GLFW_RELEASE) {
             showKeyOverlay = !showKeyOverlay;
             txt.print(-0.95f, -0.7, (showKeyOverlay ? "" : "Hold L to see all furnitures"), 4,
                 "SS", false, true, true, TAL_LEFT, TRH_LEFT, TRV_TOP);
@@ -397,7 +436,7 @@ protected:
             txt.updateCommandBuffer();
         }
 
-        prevPlusState = state;
+        prevPlusState = pState;
     }
 
     void handleDelete() {
@@ -415,10 +454,8 @@ protected:
                     selectedObjectIndex = -1;
                 } else {
                     hiddenIds.erase(id);
-                    // keep selection as None; user can TAB to choose again
                 }
 
-                // Always refresh the "Currently editing" label
                 const std::string curr =
                     (selectedListPos >= 0 && selectedListPos < (int)selectableIds.size())
                     ? "Currently editing: \n" + selectableIds[selectedListPos]
@@ -436,47 +473,44 @@ protected:
                 txt.updateCommandBuffer();
             }
         }
-
         prevDelState = kState;
     }
 
     void handleModeToggle() {
-        int s = glfwGetKey(window, GLFW_KEY_Q);
 
-        if (s == GLFW_PRESS && prevQState == GLFW_RELEASE) {
+        int qState = glfwGetKey(window, GLFW_KEY_Q);
+        if (qState == GLFW_PRESS && prevQState == GLFW_RELEASE) {
             editMode = !editMode;
-            std::cout << (editMode ? "[MODE] Edit\n" : "[MODE] Camera\n");
             txt.print(-0.95f, -0.95f, (editMode ? "EDIT MODE" : "CAM MODE"), 1, "SS");
             txt.updateCommandBuffer();
         }
-
-        prevQState = s;
+        prevQState = qState;
     }
 
     void handleListDisplay() {
-        int state = glfwGetKey(window, GLFW_KEY_L);
+        int lState = glfwGetKey(window, GLFW_KEY_L);
 
-        // pressed -> show list
-        if (state == GLFW_PRESS && prevLState == GLFW_RELEASE && !showKeyOverlay) {
+        // pressed; show list
+        if (lState == GLFW_PRESS && prevLState == GLFW_RELEASE && !showKeyOverlay) {
             txt.print(-0.95f, -0.7f, makeVisibleListString(), 4, "SS",
                 false, true, true, TAL_LEFT, TRH_LEFT, TRV_TOP);
             txt.updateCommandBuffer();
         }
 
-        // released -> show hint (do NOT touch the "Currently editing" line)
-        if (state == GLFW_RELEASE && prevLState == GLFW_PRESS && !showKeyOverlay) {
+        // released; show possible action
+        if (lState == GLFW_RELEASE && prevLState == GLFW_PRESS && !showKeyOverlay) {
             txt.print(-0.95f, -0.7f, "Press L to see all furnitures", 4, "SS",
                 false, true, true, TAL_LEFT, TRH_LEFT, TRV_TOP);
             txt.updateCommandBuffer();
         }
 
-        prevLState = state;
+        prevLState = lState;
     }
 
     void handleObjectSelection() {
-        int state = glfwGetKey(window, GLFW_KEY_TAB);
+        int tabState = glfwGetKey(window, GLFW_KEY_TAB);
 
-        if (state == GLFW_PRESS && prevTabState == GLFW_RELEASE) {
+        if (tabState == GLFW_PRESS && prevTabState == GLFW_RELEASE) {
             if (selectableIndices.empty() || !selectNextVisible(+1)) {
                 selectedListPos = -1;
                 selectedObjectIndex = -1;
@@ -490,7 +524,6 @@ protected:
             txt.print(-0.95f, -0.85f, curr, 2, "SS", false,
                         true, true, TAL_LEFT, TRH_LEFT, TRV_TOP);
 
-            // Optional: if L held, refresh the list content too
             if (glfwGetKey(window, GLFW_KEY_L) == GLFW_PRESS) {
                 txt.print(-0.95f, -0.7f, makeVisibleListString(), 4, "SS",
                     false, true, true, TAL_LEFT, TRH_LEFT, TRV_TOP);
@@ -499,12 +532,7 @@ protected:
             txt.updateCommandBuffer();
         }
 
-        prevTabState = state;
-    }
-
-    static void populateCommandBufferAccess(VkCommandBuffer commandBuffer, int currentImage, void *params) {
-        auto *app = reinterpret_cast<CG_hospital*>(params);
-        app->populateCommandBuffer(commandBuffer, currentImage);
+        prevTabState = tabState;
     }
 
     void buildSelectableFromJSON(const char* path) {
@@ -528,7 +556,6 @@ protected:
         selectableIndices.clear();
         selectableIds.clear();
 
-        // elements order == Scene instance order
         for (int i = 0; i < (int)elements.size(); ++i) {
             std::string id = elements[i].value("id", std::string{});
 
@@ -539,66 +566,14 @@ protected:
         }
     }
 
-    void manipulateSelected(float dt, bool fire) {
-        if (selectedObjectIndex < 0) return;  // nothing selected
-
-        const float MOVE = (fire ? 50.0f : 15.0f);  // units/sec
-        const float ROT = glm::radians(fire ? 180.0f : 90.0f);  // rad/sec
-        const float SCL = (fire ? 1.5f : 1.2f);  // scale step multiplier
-
-        auto &inst = SC.TI[0].I[selectedObjectIndex];
-
-        // TRANSLATE in WORLD space (pre-multiply)
-        // Arrows: X/Z, PageUp/PageDown: Y
-        if (glfwGetKey(window, GLFW_KEY_LEFT) == GLFW_PRESS) {
-            inst.Wm = glm::translate(glm::mat4(1), glm::vec3(-MOVE*dt, 0, 0)) * inst.Wm;
-        }
-        if (glfwGetKey(window, GLFW_KEY_RIGHT) == GLFW_PRESS) {
-            inst.Wm = glm::translate(glm::mat4(1), glm::vec3(MOVE*dt, 0, 0)) * inst.Wm;
-        }
-        if (glfwGetKey(window, GLFW_KEY_UP) == GLFW_PRESS) {
-            inst.Wm = glm::translate(glm::mat4(1), glm::vec3(0, 0, -MOVE*dt)) * inst.Wm;
-        }
-        if (glfwGetKey(window, GLFW_KEY_DOWN) == GLFW_PRESS) {
-            inst.Wm = glm::translate(glm::mat4(1), glm::vec3(0, 0, MOVE*dt)) * inst.Wm;
-        }
-        if (glfwGetKey(window, GLFW_KEY_PAGE_UP) == GLFW_PRESS) {
-            inst.Wm = glm::translate(glm::mat4(1), glm::vec3(0, MOVE*dt, 0)) * inst.Wm;
-        }
-        if (glfwGetKey(window, GLFW_KEY_PAGE_DOWN) == GLFW_PRESS) {
-            inst.Wm = glm::translate(glm::mat4(1), glm::vec3(0, -MOVE*dt, 0)) * inst.Wm;
-        }
-
-        // ROTATE about Y-axis
-        if (glfwGetKey(window, GLFW_KEY_T) == GLFW_PRESS) {
-            inst.Wm = inst.Wm * glm::rotate(glm::mat4(1), ROT*dt, glm::vec3(0,1,0));
-        }
-        if (glfwGetKey(window, GLFW_KEY_G) == GLFW_PRESS) {
-            inst.Wm = inst.Wm * glm::rotate(glm::mat4(1), -ROT*dt, glm::vec3(0,1,0));
-        }
-
-        // SCALE uniformly in LOCAL space (post-multiply)
-        float step = std::pow(SCL, dt * 5.0f);
-
-        if (glfwGetKey(window, GLFW_KEY_S) == GLFW_PRESS) {
-            // shrink
-            inst.Wm = inst.Wm * glm::scale(glm::mat4(1.0f), glm::vec3(1.0f / step));
-        }
-
-        if (glfwGetKey(window, GLFW_KEY_W) == GLFW_PRESS) {
-            // grow
-            inst.Wm = inst.Wm * glm::scale(glm::mat4(1.0f), glm::vec3(step));
-        }
-    }
-
     bool isVisibleAtListPos(int listPos) const {
         return (listPos >= 0 && listPos < (int)selectableIds.size() &&
                 hiddenIds.count(selectableIds[listPos]) == 0);
     }
 
     std::string makeVisibleListString() const {
-        std::string s;
 
+        std::string s;
         for (size_t i = 0; i < selectableIds.size(); ++i) {
             if (hiddenIds.count(selectableIds[i]) == 0) {
                 s += selectableIds[i] + "\n";
@@ -633,14 +608,14 @@ protected:
 };
 
 int main() {
-    CG_hospital app;
 
+    CG_hospital app;
     try {
         app.run();
     } catch (const std::exception& e) {
         std::cerr << e.what() << std::endl;
         return EXIT_FAILURE;
     }
-
     return EXIT_SUCCESS;
+
 }
