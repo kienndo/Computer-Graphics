@@ -45,9 +45,8 @@ vec3 calculateColorForEachLight(vec4 lightPos, vec3 albedo) {
 	vec3 Specular = MS * pow(clamp(dot(Norm, normalize(LightDir + EyeDir)), 0.0f, 1.0f), ubo.gamma);
 
     vec3 color = LightModel * (Diffuse + Specular);
-    vec3 toneMapped = color / (color + vec3(1.0f));
 
-    return toneMapped;
+    return color;
 }
 
 void main() {
