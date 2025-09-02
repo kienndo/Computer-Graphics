@@ -104,7 +104,7 @@ protected:
     float     camPitch = -0.5f;
     glm::vec3 camFwd{0,0,-1}, camRight{1,0,0}, camUp{0,1,0};
 
-    void setWindowParameters() {
+    void setWindowParameters() override {
         windowWidth = 1280;
         windowHeight = 720;
         windowTitle = "CG_hospital";
@@ -112,12 +112,14 @@ protected:
     }
 
     void onWindowResize(int w, int h) override {
+
         std::cout << "Window resized to: " << w << " x " << h << "\n";
         if (h > 0) Ar = float(w) / float(h);
         RP.width  = w;
         RP.height = h;
 
         txt.resizeScreen(w, h);
+
     }
 
     void localInit() override {
@@ -211,6 +213,11 @@ protected:
         txt.print(-0.95f, -0.95f, ("CAM MODE"), 1, "SS");
         txt.print(-0.95f, -0.85f, "Currently editing: \nNone", 2, "SS", false,
                 true, true, TAL_LEFT, TRH_LEFT, TRV_TOP);
+        txt.print(-0.95f, -0.75f, "", 3, "SS", false,
+                true, true, TAL_LEFT, TRH_LEFT, TRV_TOP);
+        txt.print(-0.95f, -0.70f, "", 4, "SS", false,
+                true, true, TAL_LEFT, TRH_LEFT, TRV_TOP);
+
         txt.updateCommandBuffer();
 
         std::cout << "\nLoading the scene\n\n";
@@ -433,7 +440,7 @@ protected:
             showKeyOverlay = !showKeyOverlay;
             txt.print(-0.95f, -0.75, (showKeyOverlay ? "" : "Press P to show keyboard actions"), 3,
                 "SS", false, true, true, TAL_LEFT, TRH_LEFT, TRV_TOP);
-            txt.print(-0.95f, -0.7, (showKeyOverlay ? "" : "Hold L to see all furnitures"), 4,
+            txt.print(-0.95f, -0.70, (showKeyOverlay ? "" : "Hold L to see all furnitures"), 4,
                 "SS", false, true, true, TAL_LEFT, TRH_LEFT, TRV_TOP);
             txt.updateCommandBuffer();
         }
