@@ -226,6 +226,10 @@ protected:
         txt.print(-0.95f, -0.95f, ("CAM MODE"), 1, "SS");
         txt.print(-0.95f, -0.85f, "Currently editing: \nNone", 2, "SS", false,
                 true, true, TAL_LEFT, TRH_LEFT, TRV_TOP);
+        txt.print(-0.95f, -0.75f, "", 3, "SS", false,
+        true, true, TAL_LEFT, TRH_LEFT, TRV_TOP);
+        txt.print(-0.95f, -0.70f, "", 4, "SS", false,
+                true, true, TAL_LEFT, TRH_LEFT, TRV_TOP);
         txt.updateCommandBuffer();
 
         std::cout << "\nLoading the scene\n\n";
