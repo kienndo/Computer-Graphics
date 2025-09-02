@@ -443,9 +443,9 @@ protected:
 
     void handleDelete() {
 
-        int kState = glfwGetKey(window, GLFW_KEY_D);
+        int dState = glfwGetKey(window, GLFW_KEY_D);
 
-        if (kState == GLFW_PRESS && prevDelState == GLFW_RELEASE && editMode) {
+        if (dState == GLFW_PRESS && prevDelState == GLFW_RELEASE && editMode) {
             if (selectedListPos >= 0 && selectedListPos < (int)selectableIds.size()) {
                 const std::string id = selectableIds[selectedListPos];
                 const bool wasVisible = (hiddenIds.count(id) == 0);
@@ -454,8 +454,6 @@ protected:
                     hiddenIds.insert(id);
                     selectedListPos = -1;
                     selectedObjectIndex = -1;
-                } else {
-                    hiddenIds.erase(id);
                 }
 
                 const std::string curr =
@@ -466,16 +464,15 @@ protected:
                 txt.print(-0.95f, -0.85f, curr, 2, "SS", false,
                     true, true, TAL_LEFT, TRH_LEFT, TRV_TOP);
 
-                // Refresh list only if L is currently held
+                // Refresh list if L is currently held
                 if (glfwGetKey(window, GLFW_KEY_L) == GLFW_PRESS) {
                     txt.print(-0.95f, -0.7f, makeVisibleListString(), 4, "SS",
                         false, true, true, TAL_LEFT, TRH_LEFT, TRV_TOP);
                 }
-
                 txt.updateCommandBuffer();
             }
         }
-        prevDelState = kState;
+        prevDelState = dState;
     }
 
     void handleModeToggle() {
