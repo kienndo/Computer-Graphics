@@ -27,6 +27,7 @@ layout(set = 1, binding = 0) uniform UniformBufferObject {
 } ubo;
 
 layout(set = 1, binding = 1) uniform sampler2D tex;
+layout(set = 1, binding = 2) uniform sampler2D noisetex;
 
 vec3 calculateColorForEachLight(vec4 lightPos, vec3 albedo) {
     vec3 Norm = normalize(fragNorm);
@@ -50,7 +51,7 @@ vec3 calculateColorForEachLight(vec4 lightPos, vec3 albedo) {
 }
 
 void main() {
-    vec3 albedo = texture(tex, fragUV).rgb;
+    vec3 albedo = texture(tex, fragUV).rgb * (5.0 + texture(noisetex, fragPos.xz).rgb).rgb / 6.0;
     vec3 color = vec3(0.0f);
 
     for (int i  = 0; i < gubo.numLights; ++i) {
