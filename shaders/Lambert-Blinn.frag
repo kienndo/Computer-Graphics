@@ -27,6 +27,7 @@ layout(set = 1, binding = 0) uniform UniformBufferObject {
 } ubo;
 
 layout(set = 1, binding = 1) uniform sampler2D tex;
+layout(set = 1, binding = 2) uniform sampler2D noisetex;
 
 vec3 calculateColorForEachLight(vec4 lightPos, vec3 albedo) {
     vec3 Norm = normalize(fragNorm);
@@ -44,13 +45,12 @@ vec3 calculateColorForEachLight(vec4 lightPos, vec3 albedo) {
 	vec3 Specular = MS * pow(clamp(dot(Norm, normalize(LightDir + EyeDir)), 0.0f, 1.0f), ubo.gamma);
 
     vec3 color = LightModel * (Diffuse + Specular);
-    vec3 toneMapped = color / (color + vec3(1.0f));
 
-    return toneMapped;
+    return color;
 }
 
 void main() {
-    vec3 albedo = texture(tex, fragUV).rgb;
+    vec3 albedo = texture(tex, fragUV).rgb * (5.0 + texture(noisetex, fragPos.xz).rgb).rgb / 6.0;
     vec3 color = vec3(0.0f);
 
     for (int i  = 0; i < gubo.numLights; ++i) {

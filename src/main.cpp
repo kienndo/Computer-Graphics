@@ -22,8 +22,15 @@ struct VertexSimp {
     glm::vec2 UV;
 };
 
+struct VertexOverlay {
+    glm::vec2 pos;
+    glm::vec2 UV;
+};
+
+#define N_POINTLIGHTS 8
+
 struct GlobalUBO {
-    alignas(16) glm::vec4 lightPos[8];
+    alignas(16) glm::vec4 lightPos[N_POINTLIGHTS];
     alignas(16) glm::vec4 lightColor;
     alignas(4) glm::float32 decayFactor;
     alignas(4) glm::float32 g;
@@ -43,11 +50,6 @@ struct LocalUBO {
 
 struct OverlayUniformBuffer {
     alignas(4) float visible;
-};
-
-struct VertexOverlay {
-    glm::vec2 pos;
-    glm::vec2 UV;
 };
 
 class CG_hospital : public BaseProject {
@@ -104,7 +106,19 @@ protected:
     float     camPitch = -0.5f;
     glm::vec3 camFwd{0,0,-1}, camRight{1,0,0}, camUp{0,1,0};
 
-    void setWindowParameters() override {
+    // Point light positions
+    glm::vec4 LightPos[N_POINTLIGHTS] = {
+        glm::vec4(-15, 35, -50, 1),
+        glm::vec4(-15, 35, 0, 1),
+        glm::vec4(-15, 35, 50, 1),
+        glm::vec4(-15, 35, 100, 1),
+        glm::vec4(-67, 35, -10, 1),
+        glm::vec4(-67, 35, 85, 1),
+        glm::vec4(75, 35, -40, 1),
+        glm::vec4(75, 35, -5, 1)
+    };
+
+    void setWindowParameters() {
         windowWidth = 1280;
         windowHeight = 720;
         windowTitle = "CG_hospital";
@@ -112,14 +126,12 @@ protected:
     }
 
     void onWindowResize(int w, int h) override {
-
         std::cout << "Window resized to: " << w << " x " << h << "\n";
         if (h > 0) Ar = float(w) / float(h);
         RP.width  = w;
         RP.height = h;
 
         txt.resizeScreen(w, h);
-
     }
 
     void localInit() override {
@@ -164,24 +176,25 @@ protected:
         RP.init(this);
         RP.properties[0].clearValue = {0.05f, 0.05f, 0.08f, 1.0f};
 
+        PMesh.init(this, &VDsimp,
+            "shaders/Mesh.vert.spv",
+            "shaders/Lambert-Blinn.frag.spv",
+            {&DSLglobal, &DSLmesh});
+        PMesh.setCullMode(VK_CULL_MODE_NONE);
+
         POverlay.init(this, &VDoverlay,
             "shaders/Overlay.vert.spv",
             "shaders/Overlay.frag.spv",
             {&DSLoverlay});
         POverlay.setCullMode(VK_CULL_MODE_NONE);
 
-        PMesh.init(this, &VDsimp,
-            "shaders/Mesh.vert.spv",
-            "shaders/Lambert-Blinn.frag.spv",
-        { &DSLglobal, &DSLmesh });
-        PMesh.setCullMode(VK_CULL_MODE_NONE);
-
         VDRs.resize(1);
         VDRs[0].init("VDsimp", &VDsimp);
 
         PRs.resize(1);
         PRs[0].init("Mesh", {
-          { &PMesh, { {},
+          {&PMesh, {
+              {},
             {
                 { true, 0, {} },
                 { true, 1, {} },
@@ -213,11 +226,6 @@ protected:
         txt.print(-0.95f, -0.95f, ("CAM MODE"), 1, "SS");
         txt.print(-0.95f, -0.85f, "Currently editing: \nNone", 2, "SS", false,
                 true, true, TAL_LEFT, TRH_LEFT, TRV_TOP);
-        txt.print(-0.95f, -0.75f, "", 3, "SS", false,
-                true, true, TAL_LEFT, TRH_LEFT, TRV_TOP);
-        txt.print(-0.95f, -0.70f, "", 4, "SS", false,
-                true, true, TAL_LEFT, TRH_LEFT, TRV_TOP);
-
         txt.updateCommandBuffer();
 
         std::cout << "\nLoading the scene\n\n";
@@ -226,7 +234,6 @@ protected:
     }
 
     void pipelinesAndDescriptorSetsInit() override {
-
         RP.create();
         PMesh.create(&RP);
         POverlay.create(&RP);
@@ -237,11 +244,9 @@ protected:
         txt.pipelinesAndDescriptorSetsInit();
 
         submitCommandBuffer("main", 0, populateCommandBufferAccess, this);
-
     }
 
     void pipelinesAndDescriptorSetsCleanup() override {
-
         PMesh.cleanup();
         POverlay.cleanup();
         DSKey.cleanup();
@@ -249,7 +254,6 @@ protected:
 
         SC.pipelinesAndDescriptorSetsCleanup();
         txt.pipelinesAndDescriptorSetsCleanup();
-
     }
 
     void localCleanup() {
@@ -267,8 +271,12 @@ protected:
         SC.localCleanup();
     }
 
-    void populateCommandBuffer(VkCommandBuffer cmdBuffer, int currentImage) {
+    static void populateCommandBufferAccess(VkCommandBuffer commandBuffer, int currentImage, void *params) {
+        CG_hospital *app = (CG_hospital*)params;
+        app->populateCommandBuffer(commandBuffer, currentImage);
+    }
 
+    void populateCommandBuffer(VkCommandBuffer cmdBuffer, int currentImage) {
         RP.begin(cmdBuffer, currentImage);
 
         PMesh.bind(cmdBuffer);
@@ -281,11 +289,9 @@ protected:
                         0, 0, 0);
 
         RP.end(cmdBuffer);
-
     }
 
     void updateUniformBuffer(uint32_t currentImage) {
-
         if (glfwGetKey(window, GLFW_KEY_ESCAPE))
             glfwSetWindowShouldClose(window, GL_TRUE);
 
@@ -302,25 +308,13 @@ protected:
         handleDelete();
         handleListDisplay();
 
-        float Ar = float(windowWidth) / float(windowHeight);
         glm::mat4 Prj = glm::perspective(glm::radians(60.0f), Ar, 0.01f, 270.0f);
         Prj[1][1] *= -1.0f;
 
         glm::mat4 View = glm::lookAt(camPos, camPos + camFwd, glm::vec3(0,1,0));
 
-        glm::vec4 LightPos[8] = {
-            glm::vec4(-15, 35, -50, 1),
-            glm::vec4(-15, 35, 0, 1),
-            glm::vec4(-15, 35, 50, 1),
-            glm::vec4(-15, 35, 100, 1),
-            glm::vec4(-67, 35, -10, 1),
-            glm::vec4(-67, 35, 85, 1),
-            glm::vec4(75, 35, -40, 1),
-            glm::vec4(75, 35, -5, 1)
-        };
-
         GlobalUBO g{};
-        for (int i = 0; i < 8; i++) {
+        for (int i = 0; i < N_POINTLIGHTS; i++) {
             g.lightPos[i] = LightPos[i];
         }
         g.lightColor = glm::vec4(1,0.95,0.9,1);
@@ -328,7 +322,7 @@ protected:
         g.g = 5.0f;
         g.numLights = 8;
         g.ambientLightColor = glm::vec3(0.2f, 0.19f, 0.18f);
-        g.eyePos     = camPos;
+        g.eyePos = camPos;
 
         for (int i = 0; i < SC.TI[0].InstanceCount; ++i) {
             auto &inst = SC.TI[0].I[i];
@@ -336,8 +330,8 @@ protected:
             LocalUBO l{};
             l.gamma = 120.0f;
             l.specularColor = glm::vec3(1.0f, 0.95f, 0.9f);
-            l.mMat   = inst.Wm;
-            l.nMat   = glm::inverse(glm::transpose(l.mMat));
+            l.mMat = inst.Wm;
+            l.nMat = glm::inverse(glm::transpose(l.mMat));
             l.mvpMat = Prj * View * l.mMat;
 
             const std::string& instances = *inst.id;
@@ -356,13 +350,6 @@ protected:
 
         KeyUBO.visible = showKeyOverlay ? 1.0f : 0.0f;
         DSKey.map(currentImage, &KeyUBO, 0);
-
-    }
-
-    static void populateCommandBufferAccess(VkCommandBuffer commandBuffer, int currentImage, void *params) {
-
-        auto *app = reinterpret_cast<CG_hospital*>(params);
-        app->populateCommandBuffer(commandBuffer, currentImage);
 
     }
 
@@ -427,6 +414,7 @@ protected:
             if (glfwGetKey(window, GLFW_KEY_W) == GLFW_PRESS) { // grow
                 inst.Wm = inst.Wm * glm::scale(glm::mat4(1.0f), glm::vec3(step));
             }
+
             if (glfwGetKey(window, GLFW_KEY_S) == GLFW_PRESS) { // shrink
                 inst.Wm = inst.Wm * glm::scale(glm::mat4(1.0f), glm::vec3(1.0f / step));
             }
@@ -434,22 +422,21 @@ protected:
     }
 
     void handleKeyboardOverlay() {
-
         int pState = glfwGetKey(window, GLFW_KEY_P);
+
         if (pState == GLFW_PRESS && prevPlusState == GLFW_RELEASE) {
             showKeyOverlay = !showKeyOverlay;
             txt.print(-0.95f, -0.75, (showKeyOverlay ? "" : "Press P to show keyboard actions"), 3,
                 "SS", false, true, true, TAL_LEFT, TRH_LEFT, TRV_TOP);
-            txt.print(-0.95f, -0.70, (showKeyOverlay ? "" : "Hold L to see all furnitures"), 4,
+            txt.print(-0.95f, -0.7, (showKeyOverlay ? "" : "Hold L to see all furnitures"), 4,
                 "SS", false, true, true, TAL_LEFT, TRH_LEFT, TRV_TOP);
             txt.updateCommandBuffer();
         }
-        prevPlusState = pState;
 
+        prevPlusState = pState;
     }
 
     void handleDelete() {
-
         int dState = glfwGetKey(window, GLFW_KEY_D);
 
         if (dState == GLFW_PRESS && prevDelState == GLFW_RELEASE && editMode) {
@@ -479,22 +466,23 @@ protected:
                 txt.updateCommandBuffer();
             }
         }
+
         prevDelState = dState;
     }
 
     void handleModeToggle() {
-
         int qState = glfwGetKey(window, GLFW_KEY_Q);
+
         if (qState == GLFW_PRESS && prevQState == GLFW_RELEASE) {
             editMode = !editMode;
             txt.print(-0.95f, -0.95f, (editMode ? "EDIT MODE" : "CAM MODE"), 1, "SS");
             txt.updateCommandBuffer();
         }
+
         prevQState = qState;
     }
 
     void handleListDisplay() {
-
         int lState = glfwGetKey(window, GLFW_KEY_L);
 
         // pressed; show list
@@ -512,7 +500,6 @@ protected:
         }
 
         prevLState = lState;
-
     }
 
     void handleObjectSelection() {
@@ -570,13 +557,14 @@ protected:
     }
 
     std::string makeVisibleListString() const {
-
         std::string s;
+
         for (size_t i = 0; i < selectableIds.size(); ++i) {
             if (hiddenIds.count(selectableIds[i]) == 0) {
                 s += selectableIds[i] + "\n";
             }
         }
+
         if (s.empty()) {
             s = "(no visible objects)";
         }
@@ -609,14 +597,15 @@ protected:
 };
 
 int main() {
-
     CG_hospital app;
+
     try {
         app.run();
     } catch (const std::exception& e) {
         std::cerr << e.what() << std::endl;
         return EXIT_FAILURE;
     }
+
     return EXIT_SUCCESS;
 
 }
