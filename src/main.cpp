@@ -54,7 +54,7 @@ struct OverlayUniformBuffer {
 
 class CG_hospital : public BaseProject {
 protected:
-    float Ar = 4.0f/3.0f;
+    float Ar;
 
     // Iterate through assets
     bool tabPressed = false;
@@ -123,6 +123,8 @@ protected:
         windowHeight = 720;
         windowTitle = "CG_hospital";
         windowResizable = GLFW_TRUE;
+
+        Ar = 16.0f/9.0f;
     }
 
     void onWindowResize(int w, int h) override {
@@ -132,6 +134,7 @@ protected:
         RP.height = h;
 
         txt.resizeScreen(w, h);
+
     }
 
     void localInit() override {
@@ -221,6 +224,10 @@ protected:
 
         TKey.init(this, "assets/models/Keyboard.png");
 
+        std::cout << "\nLoading the scene\n\n";
+        SC.init(this, 1, VDRs, PRs, "assets/models/scene.json");
+        buildSelectableFromJSON("assets/models/scene.json");
+
         txt.init(this, windowWidth, windowHeight);
 
         txt.print(-0.95f, -0.95f, ("CAM MODE"), 1, "SS");
@@ -230,11 +237,10 @@ protected:
         true, true, TAL_LEFT, TRH_LEFT, TRV_TOP);
         txt.print(-0.95f, -0.70f, "", 4, "SS", false,
                 true, true, TAL_LEFT, TRH_LEFT, TRV_TOP);
+
+        txt.resizeScreen(RP.width, RP.height);
         txt.updateCommandBuffer();
 
-        std::cout << "\nLoading the scene\n\n";
-        SC.init(this, 1, VDRs, PRs, "assets/models/scene.json");
-        buildSelectableFromJSON("assets/models/scene.json");
     }
 
     void pipelinesAndDescriptorSetsInit() override {
@@ -246,6 +252,8 @@ protected:
 
         SC.pipelinesAndDescriptorSetsInit();
         txt.pipelinesAndDescriptorSetsInit();
+
+        txt.updateCommandBuffer();
 
         submitCommandBuffer("main", 0, populateCommandBufferAccess, this);
     }
@@ -271,8 +279,8 @@ protected:
         POverlay.destroy();
         RP.destroy();
 
-        txt.localCleanup();
         SC.localCleanup();
+        txt.localCleanup();
     }
 
     static void populateCommandBufferAccess(VkCommandBuffer commandBuffer, int currentImage, void *params) {
@@ -587,7 +595,7 @@ protected:
         const int n = (int)selectableIndices.size();
 
         for (int k = 0; k < n; ++k) {
-            selectedListPos = (selectedListPos + step + n % n); // Increases with step and wraps around if at the end
+            selectedListPos = (selectedListPos + step + n) % n; // Increases with step and wraps around if at the end
 
             if (hiddenIds.count(selectableIds[selectedListPos]) == 0) {
                 selectedObjectIndex = selectableIndices[selectedListPos];
