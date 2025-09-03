@@ -238,7 +238,7 @@ protected:
         txt.print(-0.95f, -0.70f, "", 4, "SS", false,
                 true, true, TAL_LEFT, TRH_LEFT, TRV_TOP);
 
-        txt.resizeScreen(RP.width, RP.height);
+        txt.resizeScreen(RP.width, RP.height); // A fix to make MacOS realize what framebuffer we have
         txt.updateCommandBuffer();
 
     }
