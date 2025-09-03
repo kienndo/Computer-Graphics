@@ -181,6 +181,7 @@ protected:
             "shaders/Lambert-Blinn.frag.spv",
             {&DSLglobal, &DSLmesh});
         PMesh.setCullMode(VK_CULL_MODE_NONE);
+        PMesh.setCompareOp(VK_COMPARE_OP_LESS_OR_EQUAL);
 
         POverlay.init(this, &VDoverlay,
             "shaders/Overlay.vert.spv",
@@ -300,7 +301,7 @@ protected:
         bool fire = false;
 
         getSixAxis(dt, m, r, fire);
-        updateFromInput(dt, m, r, fire);
+        glm::mat4 View = updateFromInput(dt, m, r, fire);
 
         handleObjectSelection();
         handleKeyboardOverlay();
@@ -310,8 +311,6 @@ protected:
 
         glm::mat4 Prj = glm::perspective(glm::radians(60.0f), Ar, 0.01f, 270.0f);
         Prj[1][1] *= -1.0f;
-
-        glm::mat4 View = glm::lookAt(camPos, camPos + camFwd, glm::vec3(0,1,0));
 
         GlobalUBO g{};
         for (int i = 0; i < N_POINTLIGHTS; i++) {
@@ -353,7 +352,7 @@ protected:
 
     }
 
-    void updateFromInput(float dt, const glm::vec3& m, const glm::vec3& r, bool fire) {
+    glm::mat4 updateFromInput(float dt, const glm::vec3& m, const glm::vec3& r, bool fire) {
         const float ROT_SPEED = (fire ? glm::radians(180.0f) : glm::radians(120.0f));
         const float MOVE_SPEED = (fire ? 20.0f : 15.0f);
         const float SCALE_SPEED = (fire ? 1.5f : 1.2f);
@@ -376,9 +375,15 @@ protected:
             camPos += camRight * (m.x * MOVE_SPEED * dt);
             camPos += camUp * (m.y * MOVE_SPEED * dt);
             camPos -= camFwd * (m.z * MOVE_SPEED * dt);
+
+            glm::mat4 View = glm::lookAt(camPos, camPos + camFwd, glm::vec3(0,1,0));
+
+            return View;
         } else {
             // EDIT MODE for instances
-            if (selectedObjectIndex < 0) return;
+            if (selectedObjectIndex < 0) {
+                return glm::lookAt(camPos, camPos + camFwd, glm::vec3(0,1,0));
+            };
 
             auto &inst = SC.TI[0].I[selectedObjectIndex];
 
@@ -418,6 +423,11 @@ protected:
             if (glfwGetKey(window, GLFW_KEY_S) == GLFW_PRESS) { // shrink
                 inst.Wm = inst.Wm * glm::scale(glm::mat4(1.0f), glm::vec3(1.0f / step));
             }
+
+            glm::vec3 objectPos = glm::vec3(inst.Wm * glm::vec4(0, 0, 0, 1));
+            glm::mat4 View = glm::lookAt(camPos, objectPos, glm::vec3(0,1,0));
+
+            return View;
         }
     }
 
