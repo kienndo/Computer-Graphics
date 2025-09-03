@@ -54,15 +54,13 @@ struct OverlayUniformBuffer {
 
 class CG_hospital : public BaseProject {
 protected:
-    float Ar;
-
     // Iterate through assets
     bool tabPressed = false;
     int prevTabState = GLFW_RELEASE;
 
     // Delete assets
     std::unordered_set<std::string> hiddenIds;
-    int prevDelState = GLFW_RELEASE;
+    int prevDState = GLFW_RELEASE;
 
     // Mode switch state, false = Camera mode, true = Edit mode
     bool editMode = false;
@@ -70,13 +68,11 @@ protected:
 
     // Keyboard info
     bool showKeyOverlay = true;
-    int  prevPlusState  = GLFW_RELEASE;
+    int  prevPState  = GLFW_RELEASE;
 
     // List of assets
     bool showList = true;
     int  prevLState = GLFW_RELEASE;
-
-    OverlayUniformBuffer KeyUBO{};
 
     std::vector<int> selectableIndices;  // All instances
     std::vector<std::string> selectableIds;  // Name of the assets
@@ -87,8 +83,9 @@ protected:
     DescriptorSetLayout DSLglobal, DSLmesh, DSLoverlay;
 
     VertexDescriptor VDsimp, VDoverlay;
-    Pipeline         PMesh, POverlay;
+    Pipeline PMesh, POverlay;
 
+    OverlayUniformBuffer KeyUBO{};
     DescriptorSet DSKey;
     Texture TKey;
     Model MKey;
@@ -105,6 +102,8 @@ protected:
     float     camYaw   = 0.0f;
     float     camPitch = -0.5f;
     glm::vec3 camFwd{0,0,-1}, camRight{1,0,0}, camUp{0,1,0};
+
+    float Ar;
 
     // Point light positions
     glm::vec4 LightPos[N_POINTLIGHTS] = {
@@ -222,7 +221,7 @@ protected:
         MKey.indices = {0, 1, 2, 1, 2, 3};
         MKey.initMesh(this, &VDoverlay);
 
-        TKey.init(this, "assets/models/Keyboard.png");
+        TKey.init(this, "assets/textures/Keyboard.png");
 
         std::cout << "\nLoading the scene\n\n";
         SC.init(this, 1, VDRs, PRs, "assets/models/scene.json");
@@ -289,7 +288,6 @@ protected:
     void populateCommandBuffer(VkCommandBuffer cmdBuffer, int currentImage) {
         RP.begin(cmdBuffer, currentImage);
 
-        PMesh.bind(cmdBuffer);
         SC.populateCommandBuffer(cmdBuffer, 0, currentImage);
 
         POverlay.bind(cmdBuffer);
@@ -409,10 +407,10 @@ protected:
             if (glfwGetKey(window, GLFW_KEY_DOWN) == GLFW_PRESS) {
                 inst.Wm = glm::translate(glm::mat4(1), glm::vec3(0, 0, MOVE_SPEED*dt)) * inst.Wm;
             }
-            if (glfwGetKey(window, GLFW_KEY_PAGE_UP) == GLFW_PRESS) {
+            if (glfwGetKey(window, GLFW_KEY_R) == GLFW_PRESS) {
                 inst.Wm = glm::translate(glm::mat4(1), glm::vec3(0, MOVE_SPEED*dt, 0)) * inst.Wm;
             }
-            if (glfwGetKey(window, GLFW_KEY_PAGE_DOWN) == GLFW_PRESS) {
+            if (glfwGetKey(window, GLFW_KEY_F) == GLFW_PRESS) {
                 inst.Wm = glm::translate(glm::mat4(1), glm::vec3(0, -MOVE_SPEED*dt, 0)) * inst.Wm;
             }
 
@@ -443,7 +441,7 @@ protected:
     void handleKeyboardOverlay() {
         int pState = glfwGetKey(window, GLFW_KEY_P);
 
-        if (pState == GLFW_PRESS && prevPlusState == GLFW_RELEASE) {
+        if (pState == GLFW_PRESS && prevPState == GLFW_RELEASE) {
             showKeyOverlay = !showKeyOverlay;
             txt.print(-0.95f, -0.75, (showKeyOverlay ? "" : "Press P to show keyboard actions"), 3,
                 "SS", false, true, true, TAL_LEFT, TRH_LEFT, TRV_TOP);
@@ -452,13 +450,13 @@ protected:
             txt.updateCommandBuffer();
         }
 
-        prevPlusState = pState;
+        prevPState = pState;
     }
 
     void handleDelete() {
         int dState = glfwGetKey(window, GLFW_KEY_D);
 
-        if (dState == GLFW_PRESS && prevDelState == GLFW_RELEASE && editMode) {
+        if (dState == GLFW_PRESS && prevDState == GLFW_RELEASE && editMode) {
             if (selectedListPos >= 0 && selectedListPos < (int)selectableIds.size()) {
                 const std::string id = selectableIds[selectedListPos];
                 const bool wasVisible = (hiddenIds.count(id) == 0);
@@ -486,7 +484,7 @@ protected:
             }
         }
 
-        prevDelState = dState;
+        prevDState = dState;
     }
 
     void handleModeToggle() {
