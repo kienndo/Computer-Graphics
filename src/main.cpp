@@ -119,8 +119,8 @@ protected:
     };
 
     void setWindowParameters() {
-        windowWidth = 1280;
-        windowHeight = 720;
+        windowWidth = 2240;
+        windowHeight = 1260;
         windowTitle = "CG_hospital";
         windowResizable = GLFW_TRUE;
 
@@ -134,7 +134,6 @@ protected:
         RP.height = h;
 
         txt.resizeScreen(w, h);
-
     }
 
     void localInit() override {
@@ -240,8 +239,6 @@ protected:
                 true, true, TAL_LEFT, TRH_LEFT, TRV_TOP);
 
         txt.resizeScreen(RP.width, RP.height); // A fix to make MacOS realize what framebuffer we have
-        txt.updateCommandBuffer();
-
     }
 
     void pipelinesAndDescriptorSetsInit() override {

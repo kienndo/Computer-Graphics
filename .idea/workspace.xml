@@ -29,10 +29,8 @@
     </configurations>
   </component>
   <component name="ChangeListManager">
-    <list default="true" id="72edde42-13d2-4df3-b1df-094f5281efff" name="Changes" comment="Small fixes">
+    <list default="true" id="72edde42-13d2-4df3-b1df-094f5281efff" name="Changes" comment="Look at object in edit mode">
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/shaders/Lambert-Blinn.frag" beforeDir="false" afterPath="$PROJECT_DIR$/shaders/Lambert-Blinn.frag" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/shaders/Lambert-Blinn.frag.spv" beforeDir="false" afterPath="$PROJECT_DIR$/shaders/Lambert-Blinn.frag.spv" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/src/main.cpp" beforeDir="false" afterPath="$PROJECT_DIR$/src/main.cpp" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
@@ -60,6 +58,8 @@
   }
 }</component>
   <component name="HighlightingSettingsPerFile">
+    <setting file="mock://C:/Users/julie/CLionProjects/CG_hospital/src/main.cpp" root0="SKIP_HIGHLIGHTING" />
+    <setting file="mock://C:/Users/julie/CLionProjects/CG_hospital/src/main.cpp" root0="SKIP_HIGHLIGHTING" />
     <setting file="mock://C:/Users/julie/CLionProjects/CG_hospital/src/main.cpp" root0="SKIP_HIGHLIGHTING" />
     <setting file="mock://C:/Users/julie/CLionProjects/CG_hospital/src/main.cpp" root0="SKIP_HIGHLIGHTING" />
   </component>
@@ -119,11 +119,6 @@
         <option name="com.jetbrains.cidr.execution.CidrBuildBeforeRunTaskProvider$BuildBeforeRunTask" enabled="true" />
       </method>
     </configuration>
-    <configuration default="true" type="CMakeRunConfiguration" factoryName="Application" REDIRECT_INPUT="false" ELEVATE="false" USE_EXTERNAL_CONSOLE="false" EMULATE_TERMINAL="false" PASS_PARENT_ENVS_2="true">
-      <method v="2">
-        <option name="com.jetbrains.cidr.execution.CidrBuildBeforeRunTaskProvider$BuildBeforeRunTask" enabled="true" />
-      </method>
-    </configuration>
     <list>
       <item itemvalue="CMake Application.CG_hospital" />
       <item itemvalue="CMake Application.CG_hospital_Shaders" />
@@ -147,7 +142,8 @@
       <workItem from="1756369463695" duration="26233000" />
       <workItem from="1756562063471" duration="2083000" />
       <workItem from="1756716734386" duration="7991000" />
-      <workItem from="1756803435740" duration="7166000" />
+      <workItem from="1756803435740" duration="10799000" />
+      <workItem from="1756891680016" duration="1537000" />
     </task>
     <task id="LOCAL−00001" summary="one aircondition through scene.json works">
       <option name="closed" value="true" />
@@ -236,7 +232,39 @@
       <option name="project" value="LOCAL" />
       <updated>1756748369408</updated>
     </task>
-    <option name="localTasksCounter" value="12" />
+    <task id="LOCAL-00012" summary="Added noise and moved lightpos in main">
+      <option name="closed" value="true" />
+      <created>1756842486573</created>
+      <option name="number" value="00012" />
+      <option name="presentableId" value="LOCAL-00012" />
+      <option name="project" value="LOCAL" />
+      <updated>1756842486573</updated>
+    </task>
+    <task id="LOCAL-00013" summary="Removed unused frament shader">
+      <option name="closed" value="true" />
+      <created>1756845281135</created>
+      <option name="number" value="00013" />
+      <option name="presentableId" value="LOCAL-00013" />
+      <option name="project" value="LOCAL" />
+      <updated>1756845281135</updated>
+    </task>
+    <task id="LOCAL-00014" summary="Removed tone mapping from shader">
+      <option name="closed" value="true" />
+      <created>1756845778216</created>
+      <option name="number" value="00014" />
+      <option name="presentableId" value="LOCAL-00014" />
+      <option name="project" value="LOCAL" />
+      <updated>1756845778216</updated>
+    </task>
+    <task id="LOCAL-00015" summary="Look at object in edit mode">
+      <option name="closed" value="true" />
+      <created>1756891819791</created>
+      <option name="number" value="00015" />
+      <option name="presentableId" value="LOCAL-00015" />
+      <option name="project" value="LOCAL" />
+      <updated>1756891819791</updated>
+    </task>
+    <option name="localTasksCounter" value="16" />
     <servers />
   </component>
   <component name="TypeScriptGeneratedFilesManager">
@@ -274,6 +302,10 @@
     <MESSAGE value="Changed order of light positions in LightPos" />
     <MESSAGE value="Changed id of objects" />
     <MESSAGE value="Small fixes" />
-    <option name="LAST_COMMIT_MESSAGE" value="Small fixes" />
+    <MESSAGE value="Added noise and moved lightpos in main" />
+    <MESSAGE value="Removed unused frament shader" />
+    <MESSAGE value="Removed tone mapping from shader" />
+    <MESSAGE value="Look at object in edit mode" />
+    <option name="LAST_COMMIT_MESSAGE" value="Look at object in edit mode" />
   </component>
 </project>
