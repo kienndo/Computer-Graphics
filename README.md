@@ -1,6 +1,6 @@
 # CG_hospital
 
-A modern Vulkan application that renders an interactive 3D hospital scene with dynamic lighting, object manipulation, and overlay features.
+A modern Vulkan application that renders an interactive 3D hospital scene with dynamic lighting, object manipulation, and overlay features. This code has been implemented for the Politecnico di Milano course Computer Graphics.
 
 ---
 
